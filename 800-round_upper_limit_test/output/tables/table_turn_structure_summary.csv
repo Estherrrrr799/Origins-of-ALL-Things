@@ -1,0 +1,7 @@
+﻿Matchup,N,Valid Games,Timed-Out Games,Completion Rate (%),Valid Turns P50,Valid Turns P95,Valid Turns P99,Valid Turns Max,Timed-Out lastActiveTurn P50,Timed-Out lastActiveTurn P95,Timed-Out lastActiveTurn Max,Mean Idle Turns (800 - lastActiveTurn),Idle Turn Fraction of Cap (%),Pct Timed-Out Games Ending with 0 Cards Left (%),Draw Pile Exhausted Turn (mean)
+Rule-Based vs 1SGS,5000,3083,1917,61.66,30,46,48,48,60,72,84,736.8,92.1,100.0,48.0
+Rule-Based vs Rule-Based,5000,3127,1873,62.54,30,46,48,48,60,72,84,736.7,92.1,100.0,48.0
+1SGS vs 1SGS,5000,2998,2002,59.96,30,46,48,48,60,72,84,736.8,92.1,100.0,48.0
+Rule-Based vs Random,5000,1998,3002,39.96,31,47,47,48,71,82,84,730.6,91.3,100.0,48.0
+1SGS vs Random,5000,1994,3006,39.88,31,47,47,48,71,82,84,730.8,91.4,100.0,48.0
+Random vs Random,5000,359,4641,7.18,35,47,48,48,72,83,84,728.3,91.0,100.0,48.0

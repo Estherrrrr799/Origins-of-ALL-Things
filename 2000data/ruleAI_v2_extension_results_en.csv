@@ -1,0 +1,4 @@
+﻿Matchup,Total Games,Completion Rate (%),Timed-Out Games,AI_v2 Win Rate (%),Opponent Win Rate (%),chi2,p-value
+Rule-Based AI v2 vs Rule-Based AI (original),2000,67.2,657,54.8,45.2,12.391,0.000559
+Rule-Based AI v2 vs 1SGS AI,2000,65.8,685,56.6,43.4,22.760,0.000006
+Rule-Based AI v2 vs Rule-Based AI v2 (control),2000,70.0,601,100.0,N/A,N/A,N/A

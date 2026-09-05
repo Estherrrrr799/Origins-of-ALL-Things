@@ -1,0 +1,4 @@
+﻿Matchup,Total Games,Completion Rate (%),Timed-Out Games,Rule-Based Win Rate (%),1SGS Win Rate (%),Avg. Turns,Avg. Decision Time (ms),Avg. Max Single-Move Decision Time (ms),Avg. Absorption/Evolution Count,Avg. Winning Score,MannWhitneyU_Statistic(per-move),MannWhitneyU_zValue(per-move),MannWhitneyU_pValue(per-move),RuleDecisionStepsN,1SGSDecisionStepsN,MannWhitneyU_pValue(per-game robust),RuleGamesN,1SGSGamesN
+Rule-Based vs 1SGS,2000,60.8,785,51.4,48.6,29.9,0.009,0.104,7.65,11.3,177432333.00,-47.5771,<0.000001,20224,20179,<0.000001,1212,1215
+Rule-Based vs Rule-Based (control),2000,61.3,774,100.0,N/A,29.3,0.002,0.050,7.60,11.4,N/A,N/A,N/A,N/A,N/A,N/A,N/A,N/A
+1SGS vs 1SGS (control),2000,61.5,770,N/A,100.0,29.0,0.015,0.112,7.57,11.4,N/A,N/A,N/A,N/A,N/A,N/A,N/A,N/A

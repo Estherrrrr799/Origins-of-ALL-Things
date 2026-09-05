@@ -1,0 +1,33 @@
+==============================================================================
+RANDOM BASELINE CONTROL GROUP -- EXACT STATISTICAL VERIFICATION
+==============================================================================
+
+------------------------------------------------------------------------------
+Matchup: Rule-Based vs Random (baseline)
+  Total games: 2000   Valid (completed) games: 830   Timed out: 1170
+  Completion rate: 41.5%
+  Rule-Based wins: 774   Random wins: 56   (of 830 completed games)
+  Rule-Based win rate: 93.3%   (95% Wilson CI: 91.3%-94.8%)
+  Exact two-sided binomial test vs. chance (p0=0.5): p = 1.865e-162 (significantly different from chance)
+  Chi-square goodness-of-fit cross-check: chi2 = 621.1133, p = 4.282e-137
+
+------------------------------------------------------------------------------
+Matchup: 1SGS (Greedy) vs Random (baseline)
+  Total games: 2000   Valid (completed) games: 844   Timed out: 1156
+  Completion rate: 42.2%
+  1SGS (Greedy) wins: 786   Random wins: 58   (of 844 completed games)
+  1SGS (Greedy) win rate: 93.1%   (95% Wilson CI: 91.2%-94.6%)
+  Exact two-sided binomial test vs. chance (p0=0.5): p = 5.637e-164 (significantly different from chance)
+  Chi-square goodness-of-fit cross-check: chi2 = 627.9431, p = 1.400e-138
+
+------------------------------------------------------------------------------
+Matchup: Random vs Random (sanity control)
+  Total games: 2000   Valid (completed) games: 145   Timed out: 1855
+  Completion rate: 7.2%
+  No win-rate test performed: both sides use the identical no-strategy Random AI, so a win-rate comparison is not meaningful here. This matchup is reported only for its completion rate, as a sanity check that games between two non-strategic players rarely resolve within the turn cap.
+
+------------------------------------------------------------------------------
+Completion-rate homogeneity across the three matchups (chi-square test of homogeneity, contingency table = [completed, timed-out] x 3 matchups):
+  chi2 = 755.8121, df = 2, p = 7.542e-165 (completion rate differs significantly across matchups)
+
+==============================================================================
