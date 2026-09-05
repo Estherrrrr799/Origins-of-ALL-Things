@@ -1,0 +1,5 @@
+﻿Batch,N,chi2,df,p,p_bonferroni,Sig. (alpha=0.05),Sig. after Bonferroni (alpha'=0.0167),Cohen's w,Max |Deviation from 25%| (pp),Spread Max-Min (pp)
+Batch 1,1330,4.7789,3,0.188718,0.566154,No,No,0.0599,2.44,3.98
+Batch 2,1391,2.3314,3,0.506529,1.000000,No,No,0.0409,1.64,2.8
+Batch 3,1387,8.1002,3,0.043985,0.131956,Yes,No,0.0764,2.33,4.61
+Pooled,4108,8.3953,3,0.038510,"N/A (single pooled test, not part of per-batch family)",Yes,N/A,0.0452,1.61,3.19

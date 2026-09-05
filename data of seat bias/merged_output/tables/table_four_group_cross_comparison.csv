@@ -1,0 +1,5 @@
+﻿Group,N (pooled),N Runs Pooled,Seat 0 Rate (%),Seat 1 Rate (%),Seat 2 Rate (%),Seat 3 Rate (%),chi2,df,p (exact),Cohen's w,Max |Deviation from 25%| (pp),Spread Max-Min (pp),Source File(s)
+Random vs Random,4108,3,23.42,25.1,26.61,24.88,8.3953,3,0.038510,0.0452,1.61,3.19,20000×3_random_AI_seat_test\output\tables\table1_seat_winrate_by_batch.csv; 20000×3_random_AI_seat_test\output\tables\table2_chi2_goodness_of_fit_by_batch.csv
+Mixed diagnostic (four-seat overall),36970,3,25.07,25.24,25.72,23.97,24.4567,3,0.000020,0.0257,1.03,1.75,20000×3seat_test_final\output\tables\table1_seat_winrate_by_run_and_pooled.csv
+Control group - Rule-Based vs Rule-Based (control),37328,3,24.33,26.04,25.06,24.57,25.7233,3,0.000011,0.0263,1.04,1.71,20000×3seat_test_final\output\tables\table1_seat_winrate_by_run_and_pooled.csv
+Control group - 1SGS vs 1SGS (control),36249,3,24.57,25.45,25.35,24.64,9.3543,3,0.024933,0.0161,0.45,0.88,20000×3seat_test_final\output\tables\table1_seat_winrate_by_run_and_pooled.csv

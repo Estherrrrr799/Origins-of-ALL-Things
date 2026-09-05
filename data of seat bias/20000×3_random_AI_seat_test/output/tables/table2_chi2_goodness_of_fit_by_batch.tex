@@ -1,0 +1,15 @@
+\begin{table}[htbp]
+\centering
+\caption{Chi-square goodness-of-fit test for seat position win rate (Random vs Random)}
+\label{tab:random_seat_chi2}
+\begin{tabular}{lrrrrrrrrrr}
+\toprule
+Batch & N & chi2 & df & p & p\_bonferroni & Sig. (alpha=0.05) & Sig. after Bonferroni (alpha'=0.0167) & Cohen's w & Max |Deviation from 25\%| (pp) & Spread Max-Min (pp) \\
+\midrule
+Batch 1 & 1330 & 4.78 & 3 & 0.188718 & 0.566154 & No & No & 0.06 & 2.44 & 3.98 \\
+Batch 2 & 1391 & 2.33 & 3 & 0.506529 & 1.000000 & No & No & 0.04 & 1.64 & 2.80 \\
+Batch 3 & 1387 & 8.10 & 3 & 0.043985 & 0.131956 & Yes & No & 0.08 & 2.33 & 4.61 \\
+Pooled & 4108 & 8.40 & 3 & 0.038510 & N/A (single pooled test, not part of per-batch family) & Yes & N/A & 0.05 & 1.61 & 3.19 \\
+\bottomrule
+\end{tabular}
+\end{table}

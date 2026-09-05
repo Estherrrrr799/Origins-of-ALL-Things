@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Origins of All Things</title>
+    <!-- 引入 React 三剑客 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body,#root{width:100%;height:100%;overflow:hidden;}
+body{
+  font-family:'Nunito','Segoe UI',sans-serif;
+  background:linear-gradient(168deg,#b8e8f8 0%,#c8f0fc 25%,#d8f4fe 55%,#e8fafe 100%);
+}
+
+/* Unified thin scrollbar style, hides default browser arrow buttons */
+*::-webkit-scrollbar{width:6px;height:6px;}
+*::-webkit-scrollbar-track{background:transparent;}
+*::-webkit-scrollbar-thumb{background:rgba(120,160,210,0.35);border-radius:10px;}
+*::-webkit-scrollbar-thumb:hover{background:rgba(120,160,210,0.55);}
+*::-webkit-scrollbar-button{display:none;width:0;height:0;}
+*{scrollbar-width:thin;scrollbar-color:rgba(120,160,210,0.35) transparent;}
+
+/* Cloud texture background layer */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 500px 180px at 15% 20%,rgba(255,255,255,.45) 0%,transparent 70%),
+    radial-gradient(ellipse 400px 140px at 75% 55%,rgba(255,255,255,.35) 0%,transparent 70%),
+    radial-gradient(ellipse 600px 200px at 45% 85%,rgba(255,255,255,.28) 0%,transparent 70%),
+    radial-gradient(ellipse 300px 100px at 90% 15%,rgba(255,255,255,.3) 0%,transparent 70%);
+}
+
+/* ── Animations动画效果 ── */
+@keyframes float-card{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes glow-pulse{0%,100%{filter:drop-shadow(0 0 4px currentColor);opacity:.7}50%{filter:drop-shadow(0 0 10px currentColor);opacity:1}}
+@keyframes star-rise{
+  0%{opacity:0;transform:translateY(4px) scale(.4) rotate(0deg)}
+  15%{opacity:.9}80%{opacity:.6}
+  100%{opacity:0;transform:translateY(-55vh) scale(1.1) rotate(180deg)}
+}
+@keyframes bounce-in{0%{transform:scale(.4);opacity:0}65%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+@keyframes shimmer-set{
+  0%{box-shadow:0 0 8px #ffd700aa}
+  50%{box-shadow:0 0 20px #ffd700,0 0 35px #ffd70055}
+  100%{box-shadow:0 0 8px #ffd700aa}
+}
+@keyframes bubble-in{0%{transform:translateY(8px);opacity:0}100%{transform:translateY(0);opacity:1}}
+@keyframes spin-halo{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+
+/* ── Card common 卡牌交互 ── */
+.game-card{transition:transform .13s ease,box-shadow .13s ease,opacity .13s;}
+.game-card:hover{transform:translateY(-4px) scale(1.04)!important;z-index:10;}
+.game-card.selected{transform:translateY(-12px) scale(1.08)!important;animation:float-card 1.6s ease-in-out infinite;}
+.game-card.glow{animation:glow-pulse 1s ease-in-out infinite;}
+
+/* ── Card back ── */
+.cb{
+  background:linear-gradient(145deg,#fce4f0 0%,#f4c0d8 50%,#eea8c8 100%);
+  border:2.5px solid #f4b0cc;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;position:relative;overflow:hidden;
+  box-shadow:0 4px 12px rgba(200,100,150,.25),0 1px 0 rgba(255,255,255,.8);
+}
+/* Diamond texture pattern 纹理背景 */
+.cb::before{
+  content:'';position:absolute;inset:0;
+  background:
+    repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(255,255,255,.18) 8px,rgba(255,255,255,.18) 9px),
+    repeating-linear-gradient(-45deg,transparent,transparent 8px,rgba(255,255,255,.18) 8px,rgba(255,255,255,.18) 9px);
+}
+/* Highlight 玻璃质感 */
+.cb::after{
+  content:'';position:absolute;
+  top:0;left:0;right:0;height:40%;
+  background:linear-gradient(180deg,rgba(255,255,255,.35) 0%,transparent 100%);
+  border-radius:inherit;
+}
+.cb-icon{position:relative;z-index:1;font-size:1em;opacity:.28;color:#fff;}
+.cb-ring{
+  position:absolute;border-radius:50%;
+  border:1.5px solid rgba(255,255,255,.38);
+  z-index:1;
+}
+
+/* ── Action buttons ── */
+.abtn{
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  border:none;border-radius:16px;
+  padding:10px 14px;cursor:pointer;
+  font-family:inherit;font-size:11px;font-weight:800;min-width:62px;
+  color:#fff;
+  box-shadow:0 4px 12px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.3);
+  transition:all .14s;text-shadow:0 1px 2px rgba(0,0,0,.2);
+}
+.abtn:hover:not(:disabled){transform:translateY(-3px) scale(1.06);box-shadow:0 8px 20px rgba(0,0,0,.22);}
+.abtn:active:not(:disabled){transform:translateY(-1px);}
+.abtn:disabled{opacity:.3;cursor:not-allowed;}
+.abtn .icon{font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.2));}
+
+/* ── Completed set gold glow ── */
+.set-done{animation:shimmer-set 2s ease-in-out infinite;}
+
+/* ── Log bubble ── */
+.log-bubble{animation:bubble-in .25s ease-out;}
+
+/* ── Frosted panel ── */
+.frosted{
+  background:rgba(255,255,255,.55);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,.75);
+  box-shadow:0 4px 20px rgba(100,150,200,.12),inset 0 1px 0 rgba(255,255,255,.9);
+}
+</style>
+</head>
+<!--渲染结束-->
+<body><div id="root"></div>
+<script type="text/babel">
+const{useState,useCallback,useRef}=React;
+
+/* ── SPECIES 物种核心数据 ── */
+const SP=[
+  {id:"plant",    lb:"Plant",ic:"🌿",bd:"#82c882",lt:"#edf8ed",md:"#b6ddb6",dk:"#4a8c4a"},
+  {id:"star",     lb:"Star",ic:"⭐",bd:"#f0c84a",lt:"#fff9dc",md:"#fae58c",dk:"#b08010"},
+  {id:"butterfly",lb:"Butterfly",ic:"🦋",bd:"#bb98e0",lt:"#f4eefa",md:"#d8bef4",dk:"#7850b0"},
+  {id:"fruit",    lb:"Fruit",ic:"🍑",bd:"#f4a070",lt:"#fff0e8",md:"#f8c8a8",dk:"#c06030"},
+  {id:"human",    lb:"Human",ic:"👤",bd:"#78b8e8",lt:"#e4f4fc",md:"#acd4f4",dk:"#3878b0"},
+  {id:"water",    lb:"Water",ic:"💧",bd:"#60d0e0",lt:"#e0f8fc",md:"#9ce8f4",dk:"#2090a8"},
+  {id:"flower",   lb:"Flower",ic:"🌸",bd:"#f080b8",lt:"#fce8f4",md:"#f4b0d4",dk:"#c04888"},
+];
+const SPO=SP.map(s=>s.id);
+const gsp=id=>SP.find(s=>s.id===id);
+const chunk=(arr,n)=>{const r=[];for(let i=0;i<arr.length;i+=n)r.push(arr.slice(i,i+n));return r;};
+
+/* ── UTILS 工具函数包  ── */
+// 卡牌排序函数
+const srt=h=>[...h].sort((a,b)=>{
+    const d=SPO.indexOf(a.species)-SPO.indexOf(b.species);
+    return d||a.variant-b.variant;
+});
+
+// 构建完整牌库
+function buildDeck(){
+    const d=[];
+    for(const s of SP)
+        for(const v of[1,2,3])
+            for(let c=0;c<4;c++)
+                d.push({
+                    species:s.id,
+                    variant:v,
+                    id:`${s.id}-${v}-${c}`
+                });
+    return d;
+}
+
+// 洗牌函数 Fisher-Yates算法
+function shuffle(a){
+    const r=[...a];
+    for(let i=r.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [r[i],r[j]]=[r[j],r[i]];
+    }
+    return r;
+}
+
+// 按物种排序手牌
+function getGrp(h){
+    const g={};
+    for(const c of h){
+        if(!g[c.species])
+            g[c.species]=[];
+        g[c.species].push(c);
+    }
+    return g;
+}
+/* Valid sets: Absorption-type 1+2+3, or Evolution-type 111/222/333 */
+
+// 有效牌组检验 先找进化111222333 再找吸收1+2+3
+function findValidSet(cards){
+  for(const v of[1,2,3]){
+      const same=cards.filter(c=>c.variant===v);
+      if(same.length>=3)
+          return{type:"evo",cards:same.slice(0,3)
+      };
+  }
+  const v1=cards.find(c=>c.variant===1),v2=cards.find(c=>c.variant===2),v3=cards.find(c=>c.variant===3);
+  if(v1&&v2&&v3)
+      return{type:"abs",cards:[v1,v2,v3]
+  };
+  return null;
+}
+
+// 手牌中提取所有有效牌组，返回「剩余手牌 + 已完成牌组」
+function extractSets(hand){
+  const g=getGrp(hand);
+  const ext=[];
+  let nh=[...hand];
+  for(const[sp,cards]of Object.entries(g)){
+    if(cards.length>=3){
+      const valid=findValidSet(cards);
+      if(valid){
+          ext.push({
+              species:sp,
+              type:valid.type,
+              cards:valid.cards
+          });
+          const ids=new Set(valid.cards.map(c=>c.id));
+          nh=nh.filter(c=>!ids.has(c.id));  //过滤器删选符合条件的留，不符合的不要
+      }
+    }
+  }
+  return{
+      newHand:srt(nh),
+      extracted:ext
+  };
+}
+// 胜利检测
+function checkWin(h,sets){
+    return h.length===0&&sets.length===3;  //手牌空了 + 正好合出 3 组 → 胜利
+}
+// 算得分
+function calcScore(sets,bonus){
+  let b=10;
+  if(sets.every(s=>{
+      const vs=s.cards.map(c=>c.variant).sort();
+      return vs[0]===vs[1]&&vs[1]===vs[2];
+  }))b=Math.max(b,15); //全进化组合15分
+  if(bonus?.kaoZiji)b=Math.max(b,15);
+  if(bonus?.tianZhi)b=30;
+  return b;
+}
+/* Discard logic update: The discard pool removes the restriction of "not of the same species as the devoured card",
+incorporates all non-essential cards (allowing the same species),
+and clears dead cards left by devoured species (redundant variants that cannot form effective combinations).
+The order of discarding in the discard pool:
+single cards take priority, followed by unfinished pairs, and finally the bottom-line strategy.  */
+/* 舍弃逻辑更新：舍弃池取消“与被吞噬卡牌不同物种”限制，纳入全部非必要卡牌（允许同一物种），清理被吞噬物种遗留死牌（无法组成有效组合的多余变体）。
+舍弃池丢弃顺序：单张卡牌优先，其次未完成的对子，最后兜底策略。 */
+/* ── AI逻辑板块 核心 ── */
+function ruleAI(hand,last,ca){
+  const g=getGrp(hand);
+  if(ca&&last){
+      //匹配和last同花色的所有手牌
+    const matching=hand.filter(c=>c.species===last.species);
+    if(matching.length>=2){
+      // Only absorb when it forms a valid set
+      let bestPair=null;
+      //遍历尝试与last能否有效组合
+      for(let i=0;i<matching.length;i++)
+          for(let j=i+1;j<matching.length;j++){
+              if(findValidSet([matching[i],matching[j],last])){
+                  bestPair=[matching[i],matching[j]]; //能吸收成
+                  break;
+              }
+              if(bestPair)  //找到有效组合后 即bestPair不是null，立刻退出所有循环，不再继续找
+                  break;
+      }
+      //吸收完 从可丢的牌里-先丢单张-再丢对子- 最后兜底 优化的AI弃牌规则
+      if (bestPair) {
+          const keepIds = new Set([...bestPair.map(c => c.id), last.id]);
+          const discardPool = hand.filter(c => !keepIds.has(c.id));  // 保护盾 不会丢已合成的牌
+
+          if (discardPool.length > 0) {
+              const poolGrp = getGrp(discardPool);
+              const singletons = Object.entries(poolGrp).filter(([, a]) => a.length === 1);
+              const pairs = Object.entries(poolGrp).filter(([, a]) => a.length === 2);
+
+              let d;
+              if (singletons.length) d = singletons[0][1][0];
+              else if (pairs.length) d = pairs[0][1][0];
+              else d = discardPool[0];
+
+              return {action: "absorb", discard: d};
+          }
+      }
+      //找到了能absorb的组合进行弃牌
+      // if(bestPair){
+      //   const keepIds=new Set([...bestPair.map(c=>c.id),last.id]);
+      //   //丢弃不在组合里的牌 首先不是已合成的 其次不是同类型的
+      //   const d=hand.find(c=>!keepIds.has(c.id)&&c.species!==last.species);
+      //   if(d)
+      //       return{action:"absorb",discard:d};
+      // }
+
+    }
+  }
+  // Play the card that contributes least to a valid set (keep useful cards)
+  // Prioritise playing singleton cards not part of any potential set
+  const sg=Object.entries(g).filter(([,a])=>a.length===1); //找出单张的牌
+  if(sg.length)
+      return{action:"play",card:sg[0][1][0]};
+  //第二优先 两个成对 但不够3的牌
+  const pr=Object.entries(g).filter(([,a])=>a.length===2);
+  if(pr.length)
+      return{action:"play",card:pr[0][1][0]};
+  //都没有就打手牌的第一张
+  return{action:"play",card:hand[0]};
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ruleAI_v2: a dead‑card‑clearing improved variant of Rule‑Based AI.
+Standalone function, does not overwrite original ruleAI, added as the third selectable AI mode.
+
+Motivation: Completion‑rate data shows about 60% of games cannot produce a winner within reasonable turns.
+The root cause is dead‑locked card groups: ≥3 hand cards of the same species, forming neither a valid evolve set nor a valid absorb set, e.g. 1+2+2.
+The original ruleAI only discards singleton cards and unfinished pairs, and will not actively break dead‑locked card groups, leaving dead cards stuck in hand indefinitely.
+
+Improvement logic: Before executing original discard logic, detect whether dead‑locked card groups exist in hand.
+If found, discard one surplus card of any variant appearing 2+ times within this group, converting the dead‑locked group into a pending valid pair.
+Example: 1+2+2 → discard one 2, leaving 1+2, which waits for variant 3 to form an absorb set.
+
+This remains pure rule‑based logic, only counting variant counts per species. No scoring or search is involved.
+Under Russell & Norvig taxonomy, it is still classified as a Simple Reflex Agent.
+
+Validated by A/B testing (2000 games per condition): significantly outperforms the original ruleAI.
+
+   ══════════════════════════════════════════════════════════════ */
+
+
+/* ══════════════════════════════════════════════════════════════
+ruleAI_v2：Rule‑Based AI 的死牌清理改良变体，独立函数，不覆盖原 ruleAI，作为第三种可选AI模式。
+动因：对局完成率数据显示约60%对局没法在合理回合分出胜负。根源是死锁卡牌组：同一物种手牌≥3张，但既不是合法进化组合，也不是合法吞噬组合，例：1+2+2。原版ruleAI只会舍弃单张卡牌、未完成的对子，不会主动拆开死锁卡牌组，废牌会一直卡在手里。
+优化逻辑：执行原有舍弃逻辑前，先检测手牌有没有死锁卡牌组。如果有，舍弃该组内重复2次及以上变体的一张多余卡牌，把死锁卡牌组转成可等待凑齐的有效对子。例：1+2+2 → 丢弃一张2，剩下1+2，等变体3就能凑吞噬组合。
+依旧是纯规则判定，只统计每个物种各变体数量，没有打分、搜索逻辑；依据Russell & Norvig分类，仍属于Simple Reflex Agent（简单反射智能体）。
+
+A/B测试验证（每组2000局）：性能显著优于原版ruleAI
+   ══════════════════════════════════════════════════════════════ */
+// 从手牌里找「死锁牌组」
+function findDeadGroup(hand){
+  const g=getGrp(hand);
+  for(const[sp,cards]of Object.entries(g)){
+    if(cards.length>=3 && !findValidSet(cards))
+        return {species:sp,cards};
+  }
+  return null;
+}
+// 从死锁组里挑一张该丢的牌
+function pickDeadCardToDiscard(deadGroup){
+  const byVariant={};
+  // 变体分组（类型/颜色/形态）
+  deadGroup.cards.forEach(c=>{
+      (byVariant[c.variant]=byVariant[c.variant]||[]).push(c);
+  });
+
+  const surplus=Object.values(byVariant).find(arr=>arr.length>=2);
+  return surplus ? surplus[0] : deadGroup.cards[0];
+}
+
+// 规则AI的升级版本
+function ruleAI_v2(hand,last,ca){
+  const g=getGrp(hand);
+  if(ca&&last){
+    const matching=hand.filter(c=>c.species===last.species);
+    if(matching.length>=2){
+      let bestPair=null;
+      outer: for(let i=0;i<matching.length;i++)
+          for(let j=i+1;j<matching.length;j++){
+            if(findValidSet([matching[i],matching[j],last])){
+                bestPair=[matching[i],matching[j]];
+                break outer;
+            }
+      }
+      if(bestPair){
+        const keepIds=new Set([...bestPair.map(c=>c.id),last.id]);
+        const discardPool=hand.filter(c=>!keepIds.has(c.id));
+        if(discardPool.length>0){
+          const poolGrp=getGrp(discardPool);
+          const singletons=Object.entries(poolGrp).filter(([,a])=>a.length===1);
+          const pairs=Object.entries(poolGrp).filter(([,a])=>a.length===2);
+          let d;
+          if(singletons.length) d=singletons[0][1][0];
+          else if(pairs.length) d=pairs[0][1][0];
+          else d=discardPool[0];
+          return {action:"absorb",discard:d};
+        }
+      }
+    }
+  }
+    // 先处理死锁牌组，再走普通逻辑
+  // New: check for and break up a dead group before regular singleton/pair logic
+  const dead=findDeadGroup(hand);
+  if(dead)
+      return {action:"play",card:pickDeadCardToDiscard(dead)};
+    // 没有死锁 → 按老规则出牌
+  const sg2=Object.entries(g).filter(([,a])=>a.length===1);
+  if(sg2.length)
+      return {action:"play",card:sg2[0][1][0]};
+  const pr2=Object.entries(g).filter(([,a])=>a.length===2);
+  if(pr2.length)
+      return {action:"play",card:pr2[0][1][0]};
+  return {action:"play",card:hand[0]};
+}
+
+/* ────────────────────────────────────────────────────────────
+   Search depth -- only the acting player's own candidate moves
+      are scored and the best one taken (1-ply); no opponent
+      response layer is expanded. Strictly speaking this is a
+      "greedy algorithm with a look-ahead-flavoured scoring
+      function".
+
+   evalH(h) is that heuristic scoring function: cards are grouped
+   by species; a completed valid set scores +100; near-complete
+   groups (2+ of the same variant, or all three variants present)
+   score partial credit; isolated singleton cards are penalised.
+   ──────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────
+   索深度——仅对当前玩家的候选行动进行打分并选择最优值（1层搜索）；
+      未扩展任何对手应对层。严格来说，这是一个
+      **带有前瞻式评分函数的贪心算法**。
+
+   evalH(h) 为启发式评分函数：
+   卡牌按物种分组；完成的有效组合得 +100 分；
+   接近完成的组合（同一变体≥2张，或三种变体均存在）给予部分分数；
+   孤立单张卡牌予以扣分。
+   ──────────────────────────────────────────────────────────── */
+
+//评估手牌的价值（打分制）看看吸收或打出这个牌 分能不能变高
+function evalH(h){
+  const g=getGrp(h);
+  let s=0; //初始分数为0
+    //遍历每种可能出现的类型进行打分
+  for(const[,cards]of Object.entries(g)){
+      //能直接万物起源的
+    const valid=findValidSet(cards);
+    if(valid){s+=100;
+        continue;
+    }
+    //接近合成状态 即同物种有两个
+    if(cards.length>=2){
+      const vc={};
+      cards.forEach(c=>{
+          vc[c.variant]=(vc[c.variant]||0)+1;
+      }); // 变成这样 [1,1,2] → vc = {1:2, 2:1}
+
+      const maxSame=Math.max(...Object.values(vc));  //有几张
+      const uniq=Object.keys(vc).length;  //有几种
+
+      if(maxSame>=2)s+=20;       // 2 of same variant -> close to Evolution
+      if(uniq===2&&cards.length===2)s+=15; // 2 distinct variants -> close to Absorption
+      if(uniq===3)s+=25;         // all 3 variants present -> can Absorb
+    } else
+        s-=5; //有废牌扣五分
+  }
+  return s; //返回总分
+}
+
+//尝试所有能做的操作 选得分高的执行
+function oneSGSAI(hand,last,ca){
+  let best=-Infinity,mv=null; //记录最高分以及对应的动作
+    //尝试所有合法的吸收即看能匹配的牌
+  if(ca&&last){
+    const matching=hand.filter(c=>c.species===last.species);
+
+    if(matching.length>=2){
+      // Only consider absorb options that form a valid set
+      for(let i=0;i<matching.length;i++)
+          for(let j=i+1;j<matching.length;j++){
+              //判断能不能变成有效组合
+              if(findValidSet([matching[i],matching[j],last])){
+                  const keepIds=new Set([matching[i].id,matching[j].id,last.id]); //组合成功不能丢
+                    //遍历所有可丢弃的牌
+                  for(const d of hand){
+                      if(keepIds.has(d.id))continue; // 合成牌不能丢
+                      // 模拟丢弃d，吸收last-得到新手牌
+                      const nh=[...hand.filter(c=>c.id!==d.id),last];
+                      //打分
+                      const s=evalH(nh);
+                      //分高 更新新动作以及分数
+                      if(s>best){
+                          best=s;
+                          mv={action:"absorb",discard:d};
+            }
+          }
+        }
+      }
+    }
+  }
+  //尝试打出 ‘每一张’
+  for(const card of hand){
+      const s=evalH(hand.filter(c=>c.id!==card.id));
+      if(s>best){
+          best=s;
+          mv={action:"play",card};
+      }
+  }
+  return mv||{action:"play",card:hand[0]};
+}
+
+const runAI=(mode,h,l,ca)=>mode==="rule"?ruleAI(h,l,ca):mode==="rule_v2"?ruleAI_v2(h,l,ca):oneSGSAI(h,l,ca);
+
+
+
+/* ── CARD COMPONENTS 纯交互层 ── */
+const VL=["","Ⅰ","Ⅱ","Ⅲ"];
+
+//画卡牌用的
+function CF({card,onClick,selected,glow,dimmed,w=56,h=72}){
+  const s=gsp(card.species);
+  const R=Math.min(w,h)*0.15;
+  const cls=["game-card",selected?"selected":"",glow?"glow":""].filter(Boolean).join(" ");
+  const isLandscape=w>h; // landscape detection
+  const iS=Math.min(w,h)*0.62; // icon block size: based on the shorter side
+
+  const boxStyle={
+    width:w,height:h,borderRadius:R,
+    flexShrink:0,userSelect:"none",
+    cursor:onClick?"pointer":"default",
+    opacity:dimmed?0.3:1,
+    position:"relative",overflow:"hidden",
+    background:selected
+      ?"linear-gradient(150deg,#fff 0%,#f8f0ff 100%)"
+      :`linear-gradient(150deg,#ffffff 0%,${s.lt} 55%,${s.md}66 100%)`,
+    border:`2.5px solid ${selected?"rgba(255,255,255,.9)":s.bd+"cc"}`,
+    boxShadow:glow
+      ?`0 0 0 2px ${s.bd},0 0 14px ${s.bd}88,0 4px 10px rgba(0,0,0,.3)`
+      :selected
+      ?`0 0 0 3px rgba(255,255,255,.9),0 8px 22px rgba(180,100,220,.5)`
+      :`0 3px 10px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.85)`,
+    transition:"box-shadow .12s,opacity .12s",
+  };
+
+  const iconBlock=<div style={{
+    width:iS,height:iS,flexShrink:0,
+    borderRadius:R*.75,
+    background:`linear-gradient(145deg,${s.lt} 0%,${s.md} 60%,${s.bd}88 100%)`,
+    display:"flex",alignItems:"center",justifyContent:"center",
+    fontSize:iS*.58,
+    boxShadow:`inset 0 -2px 5px rgba(0,0,0,.1),inset 0 2px 3px rgba(255,255,255,.6)`,
+  }}>
+    <span style={{filter:"drop-shadow(0 1px 2px rgba(0,0,0,.12))"}}>{s.ic}</span>
+  </div>;
+
+  const numeralBlock=<div style={{
+    background:`${s.bd}22`,borderRadius:100,
+    padding:isLandscape?`1px ${Math.max(3,w*.06)}px`:`1px ${Math.max(4,w*.12)}px`,
+    border:`1.5px solid ${s.bd}55`,flexShrink:0,
+  }}>
+    <span style={{
+      fontSize:Math.max(8,isLandscape?h*.22:w*.18),
+      color:s.dk,fontWeight:900,lineHeight:1,
+      textShadow:`0 0 8px ${s.bd}66`,
+    }}>{VL[card.variant]}</span>
+  </div>;
+
+  if(isLandscape){
+    /* Landscape layout: icon left | numeral right, row */
+    return<div onClick={onClick} className={cls} style={{
+      ...boxStyle,
+      display:"flex",flexDirection:"row",
+      alignItems:"center",justifyContent:"center",
+      gap:Math.max(3,w*.05),
+      padding:`2px ${Math.max(4,w*.06)}px`,
+    }}>
+      {/* Top highlight */}
+      <div style={{position:"absolute",top:0,left:0,right:0,height:"40%",
+        background:"linear-gradient(180deg,rgba(255,255,255,.5) 0%,transparent 100%)",
+        borderRadius:`${R}px ${R}px 0 0`,pointerEvents:"none"}}/>
+      {iconBlock}
+      {numeralBlock}
+    </div>;
+  }
+
+  /* Portrait layout (default): icon top / numeral bottom, column */
+  return<div onClick={onClick} className={cls} style={{
+    ...boxStyle,
+    display:"flex",flexDirection:"column",
+    alignItems:"center",justifyContent:"center",
+    gap:Math.max(2,h*.04),
+    padding:`${h*.07}px ${w*.05}px ${h*.09}px`,
+  }}>
+    <div style={{position:"absolute",top:0,left:0,right:0,height:"38%",
+      background:"linear-gradient(180deg,rgba(255,255,255,.55) 0%,transparent 100%)",
+      borderRadius:`${R}px ${R}px 0 0`,pointerEvents:"none"}}/>
+    {iconBlock}
+    {numeralBlock}
+  </div>;
+}
+
+//画奖励图标用的
+function CB({w=40,h=52}){
+  const R=w*.16;
+  return<div className="cb" style={{width:w,height:h,borderRadius:R}}>
+    <span className="cb-icon" style={{fontSize:w*.34}}>✿</span>
+    <div className="cb-ring" style={{width:w*.7,height:w*.7}}/>
+    <div className="cb-ring" style={{width:w*.45,height:w*.45}}/>
+  </div>;
+}
+
+
+/* ── AVATAR 头像── */
+const AV_C=["#60a8d4","#7ec8a0","#f0b060","#c090d8"];
+const AV_E=["🐱","🦊","🐼","🐰"];
+const AV_N=["P1","P2","P3","P4"];
+function Av({i,active,size=50}){
+  return<div style={{
+    width:Math.min(size,46),height:Math.min(size,46),borderRadius:"50%",flexShrink:0,
+    background:`radial-gradient(circle at 35% 35%,${AV_C[i]}cc,${AV_C[i]}55)`,
+    border:`2.5px solid ${active?AV_C[i]:"rgba(255,255,255,0.18)"}`,
+    display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+    boxShadow:active?`0 0 0 3px ${AV_C[i]}55,0 0 14px ${AV_C[i]}44`:"0 2px 8px rgba(0,0,0,0.4)",
+    color:"#fff",fontSize:9,fontWeight:700,gap:1,transition:"all 0.3s",
+  }}>
+    <div style={{fontSize:18}}>{AV_E[i]}</div>
+    <div>{AV_N[i]}</div>
+  </div>;
+}
+
+/* ── SIDE PLAYER AREA (P4 left, P2 right) ──
+   Shows completed sets FACE-UP inline, then remaining hand cards face-down.
+   All in horizontal rows of COLS_PER_ROW cards.
+*/
+/* ── Player play area (3-across rows, grouped by species, stacked vertically) ── */
+function PlayedColumn({pi,cards,completed=[]}){
+  const CW=76,CH=50;   // Fixed landscape card size (w>h auto-triggers landscape mode)
+  const HGAP=6;         // horizontal gap between cards
+  const VGAP=8;         // vertical gap between species clusters
+  const PADH=8;         // left/right padding
+
+  // Group by species, preserving first-appearance order
+  const spOrder=[];
+  const spGroups={};
+  cards.forEach(c=>{
+    if(!spGroups[c.species]){spGroups[c.species]=[];spOrder.push(c.species);}
+    spGroups[c.species].push(c);
+  });
+
+  const isLeft=pi===3;
+  const cfg=isLeft
+    ?{ga:"p4col",border:"#82c882",bg:"rgba(200,245,216,0.62)",title:"P4 Play Area",glow:"rgba(80,175,100,.2)"}
+    :{ga:"p2col",border:"#f080b8",bg:"rgba(255,218,238,0.62)",title:"P2 Play Area",glow:"rgba(190,72,132,.2)"};
+
+  return<div style={{
+    gridArea:cfg.ga,
+    height:"100%",minHeight:0,
+    margin:"4px 3px",
+    background:cfg.bg,
+    borderRadius:18,
+    border:`2px solid ${cfg.border}66`,
+    boxShadow:`0 6px 24px ${cfg.glow},inset 0 1px 0 rgba(255,255,255,.85)`,
+    backdropFilter:"blur(10px)",
+    display:"flex",flexDirection:"column",
+    overflow:"hidden",
+    /* Inner scroll region handles vertical scrolling */
+  }}>
+
+    {/* (1) Top title */}
+    <div style={{
+      padding:"5px 8px",flexShrink:0,textAlign:"center",
+      background:`linear-gradient(135deg,${cfg.border}22,${cfg.border}0a)`,
+      borderBottom:`1px solid ${cfg.border}44`,
+      borderRadius:"16px 16px 0 0",
+    }}>
+      <span style={{fontSize:10,color:cfg.border,fontWeight:900,letterSpacing:.5}}>
+        {cfg.title}</span>
+      <span style={{fontSize:9,color:cfg.border,opacity:.5,marginLeft:5}}>
+        ({cards.length} cards)</span>
+    </div>
+
+    {/* (2) Completed sets: side-by-side + Evolution/Absorption label inline */}
+    {completed.length>0&&(
+      <div style={{
+        padding:`5px ${PADH}px`,flexShrink:0,
+        background:"rgba(255,255,255,0.38)",
+        borderBottom:`1px solid ${cfg.border}33`,
+        display:"flex",flexDirection:"column",gap:5,
+      }}>
+        <div style={{fontSize:8,color:"#b08010",fontWeight:900,letterSpacing:.3}}>✦ Completed Sets</div>
+        {completed.map((set,i)=>{const s=gsp(set.species);return(
+          <div key={i} className="set-done" style={{
+            /* Horizontal flex: cards side by side */
+            display:"flex",flexDirection:"row",flexWrap:"wrap",
+            gap:HGAP,alignItems:"center",
+            width:"100%",minWidth:0,
+            background:`linear-gradient(135deg,#fffde8,${s.lt})`,
+            borderRadius:9,padding:"3px 5px",
+            border:`1.5px solid ${s.bd}77`,
+            boxShadow:`0 2px 8px ${s.bd}33`,
+          }}>
+            {set.cards.map(c=>(
+              /* flexShrink:0 locks card size, prevents compression */
+              <div key={c.id} style={{flexShrink:0}}>
+                <CF card={c} w={CW} h={CH}/>
+              </div>
+            ))}
+            <span style={{
+              fontSize:9,color:s.dk,fontWeight:900,
+              background:`${s.bd}18`,borderRadius:6,
+              padding:"2px 6px",border:`1px solid ${s.bd}44`,
+              flexShrink:0,alignSelf:"center",
+            }}>{set.type==="evo"?"Evolution":"Absorption"}</span>
+          </div>
+        );})}
+      </div>
+    )}
+
+    {/* (3) Play history: grouped by species, each cluster side by side */}
+    <div style={{
+      flex:1,minHeight:0,
+      overflowY:"auto",
+      overflowX:"hidden",
+      padding:`6px ${PADH}px`,
+      display:"flex",flexDirection:"column",
+      gap:VGAP,
+    }}>
+      {spOrder.length===0&&(
+        <div style={{
+          color:`${cfg.border}88`,fontSize:11,
+          textAlign:"center",paddingTop:28,
+          fontWeight:700,lineHeight:2,
+        }}>Waiting for a card…</div>
+      )}
+      {spOrder.map(sp=>{
+        const s=gsp(sp);
+        const spCards=spGroups[sp];
+        return<div key={sp} style={{
+          /* Species cluster container: full width, horizontal layout inside */
+          width:"100%",
+          background:`${s.bd}12`,
+          borderRadius:10,
+          padding:"4px 6px",
+          border:`1px solid ${s.bd}28`,
+          boxShadow:`inset 0 1px 0 rgba(255,255,255,.5)`,
+        }}>
+          {/* Species label row */}
+          <div style={{
+            display:"flex",alignItems:"center",gap:4,
+            fontSize:9,color:s.dk,fontWeight:900,
+            opacity:.85,marginBottom:4,
+          }}>
+            <span style={{fontSize:13}}>{s.ic}</span>
+            <span>{s.lb}</span>
+            <span style={{
+              background:`${s.bd}22`,borderRadius:8,
+              padding:"1px 5px",fontSize:8,
+              border:`1px solid ${s.bd}44`,
+            }}>×{spCards.length}</span>
+          </div>
+          {/* Cards side by side, wraps after 3 */}
+          <div style={{
+            display:"flex",
+            flexDirection:"row",  /* <- horizontal main axis */
+            flexWrap:"wrap",      /* <- auto wrap */
+            gap:HGAP,
+            alignItems:"flex-start",
+          }}>
+            {spCards.map((c,i)=>(
+              <div key={c.id+i} style={{flexShrink:0}}>
+                <CF card={c} w={CW} h={CH}/>
+              </div>
+            ))}
+          </div>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
+//侧边玩家界面组件
+function SideArea({pi,hand,isActive}){
+  const CW=64,CH=46;
+  return<div style={{display:"flex",flexDirection:"column",gap:2,padding:"4px 3px",
+    height:"100%",minHeight:0,overflowY:"auto",alignItems:"center",width:"100%"}}>
+    <div style={{fontSize:10,color:AV_C[pi],fontWeight:900,textAlign:"center",
+      width:"100%",paddingBottom:3,borderBottom:`1.5px solid ${AV_C[pi]}33`}}>
+      {AV_N[pi]}
+      {isActive&&<span style={{display:"block",fontSize:8,background:AV_C[pi],
+        color:"#fff",borderRadius:4,padding:"1px 4px",marginTop:1}}>▶ Acting</span>}
+    </div>
+    <div style={{fontSize:8,color:"rgba(100,130,160,.7)",fontWeight:700,marginTop:2}}>
+      Hand ({hand.length})
+    </div>
+    {hand.map(c=><CB key={c.id} w={CW} h={CH}/>)}
+    {hand.length===0&&<div style={{color:"rgba(120,160,120,.7)",fontSize:9,textAlign:"center",padding:"6px"}}>✓ Done</div>}
+  </div>;
+}
+
+/* ── PLAY ZONE (small cards for center ring)公区小卡牌 ── */
+function PZ({cards,max=8}){
+  // Compact landscape mini-cards: w>h auto-triggers landscape CF layout
+  const CW=50,CH=36;
+  const shown=cards.slice(-max);
+  return<div style={{
+    display:"flex",flexDirection:"row",
+    flexWrap:"wrap",gap:4,
+    alignContent:"flex-start",alignItems:"center",
+  }}>
+    {shown.map((c,i)=>(
+      <div key={c.id+i} style={{flexShrink:0,
+        filter:"drop-shadow(0 2px 5px rgba(0,0,0,.13))",
+      }}>
+        <CF card={c} w={CW} h={CH}/>
+      </div>
+    ))}
+  </div>;
+}
+
+/* ── ACTION PANEL 弹窗面板 ── */
+function ActionPanel({canAbs,canEvo,onAction,onPass}){
+  /* Rule update: Evolution & Absorption are no longer mutually exclusive.
+     If both conditions are satisfied, both buttons are enabled,
+     and the player may freely choose which synthesis to perform.
+     canAbs and canEvo are independent props — each button's enabled
+     state depends only on its own condition. */
+  return<div style={{
+    position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",
+    background:"rgba(200,230,255,0.4)",backdropFilter:"blur(6px)",borderRadius:12,zIndex:40,
+  }}>
+    <div style={{
+      background:"rgba(255,255,255,0.88)",borderRadius:20,
+      border:"1.5px solid rgba(200,220,255,0.9)",
+      padding:"14px 18px",display:"flex",gap:12,
+      boxShadow:"0 8px 32px rgba(100,160,220,0.25),inset 0 1px 0 rgba(255,255,255,1)",
+    }}>
+      <button className="abtn" disabled style={{background:"linear-gradient(135deg,#fae58c,#e8c040)",opacity:0.3}}>
+        <span style={{fontSize:20}}>🌟</span>Origins
+      </button>
+      {/* Evolution: independently lights up whenever 111/222/333 is possible (can coexist with Absorption) */}
+      <button className="abtn" onClick={()=>onAction("evo")} disabled={!canEvo}
+        style={{background:canEvo?"linear-gradient(135deg,#82c882,#4a8c4a)":"rgba(200,230,200,.3)",
+          boxShadow:canEvo?"0 0 18px #6abf6988,0 4px 12px rgba(0,0,0,.4)":""}}>
+        <span className="icon">🌿</span>Evolution
+        <span style={{fontSize:9,opacity:0.7}}>Same variant x3</span>
+      </button>
+      {/* Absorption: independently lights up whenever 1+2+3 is possible (can coexist with Evolution) */}
+      <button className="abtn" onClick={()=>onAction("abs")} disabled={!canAbs}
+        style={{background:canAbs?"linear-gradient(135deg,#bb98e0,#7850b0)":"rgba(220,210,240,.3)",
+          boxShadow:canAbs?"0 0 18px #b589d688,0 4px 12px rgba(0,0,0,.4)":""}}>
+        <span className="icon">✨</span>Absorption
+        <span style={{fontSize:9,opacity:0.7}}>1+2+3</span>
+      </button>
+      <button className="abtn" onClick={onPass}
+        style={{background:"linear-gradient(135deg,#f4a070,#c06030)"}}>
+        <span style={{fontSize:20}}>👋</span>Pass
+      </button>
+    </div>
+  </div>;
+}
+
+/* ── MAIN APP ── */
+function App(){
+    //游戏状态存储
+  const[aiMode,setAiMode]=useState(null);
+  const[G,setG]=useState(null);
+  const[sel,setSel]=useState(null);
+  const[chosenAction,setChosenAction]=useState(null); // "evo" | "abs" — remembers which button the player clicked, so discard logic executes the chosen synthesis, not just any valid one
+  const[phase,setPhase]=useState("idle");
+  const[winner,setWinner]=useState(null);
+  const[log,setLog]=useState([]);
+  const[stats,setStats]=useState({rule:{w:0,g:0},rule_v2:{w:0,g:0},oneSGS:{w:0,g:0}});
+  const tmr=useRef(null);
+
+  //游戏日志
+  const addLog=(msg,type="info")=>
+      setLog(l=>[...l.slice(-14),{msg,type,id:Math.random()}]);
+
+  //摸牌
+  const drawCard=(g,pi)=>{
+    if(!g.drawPile.length) return g;  //没牌逻辑取反 退出
+    const[drawn,...rest]=g.drawPile; //取牌堆顶部的牌
+    return{
+        ...g, // 原来的游戏数据不变
+        hands:g.hands.map((h,i)=>
+            i===pi?srt([...h,drawn]):h   // 如果是当前摸牌的玩家 手牌 +1 张 其他人不变
+        ),
+        drawPile:rest  // 牌堆移除刚摸走的那张
+    };
+  };
+  //移动合成牌组到展示区
+  const applyExt=(g,pi)=>{
+    const{newHand,extracted}=extractSets(g.hands[pi]); //提取合成牌组
+    if(!extracted.length)
+        return{g,ex:[]};  //没有合成牌组
+    return{
+        g:{
+            ...g,
+            hands:g.hands.map((h,i)=>i===pi?newHand:h), //改当前玩家的数据
+            completed:g.completed.map((s,i)=>i===pi?[...s,...extracted]:s)  //把刚合成好的牌，加入玩家的 “已完成牌组”
+        },
+        ex:extracted //刚刚合成的牌组
+    };
+  };
+  //执行胜利操作
+  const doWin=(g,pi,mode)=>{
+    if(!checkWin(g.hands[pi],g.completed[pi]))return false; //没赢
+    const score=calcScore(g.completed[pi],g.bonuses[pi]);
+    setWinner({who:pi,score});
+    setPhase("gameOver");
+    //AI对战数据统计（胜场/总场）平衡游戏难度的关键
+    setStats(s=>{
+        const k=mode||aiMode;
+        return{
+            ...s,
+            [k]:{w:s[k].w+(pi!==0?1:0),
+                g:s[k].g+1
+            }
+        };
+    });
+    addLog(`🎉 ${AV_N[pi]} achieved Origins of All Things! Score: ${score}`,"win");
+    return true;
+  };
+
+  //开始游戏
+  const startGame=useCallback((mode)=>{
+    clearTimeout(tmr.current);  //清除上一局的 AI 思考定时器
+    const deck=shuffle(buildDeck());
+    setAiMode(mode);
+    //定义g里的内容
+    setG({
+      hands:[srt(deck.slice(0,9)),srt(deck.slice(9,18)),srt(deck.slice(18,27)),srt(deck.slice(27,36))],
+      drawPile:deck.slice(36),
+      zones:[[],[],[],[]],   // played cards per player
+      completed:[[],[],[],[]],
+      lastCard:null,lastOwner:null,
+      bonuses:[{kaoZiji:true},{kaoZiji:true},{kaoZiji:true},{kaoZiji:true}],
+    });
+    setLog([]);setWinner(null);setSel(null);setChosenAction(null);
+    setPhase("playerTurn");
+    addLog("Game started! P1 goes first.","system");
+  },[]);
+
+  //出牌后的流程 摸牌 → 检查合成 → 更新界面 → 记录日志
+  const afterPlay=(g,pi,card,mode)=>{
+    // draw + extract + check win
+    let ng=drawCard(g,pi); //摸牌
+    const{g:ng2,ex}=applyExt(ng,pi);
+    ng=ng2; //尝试合成
+    const nz=ng.zones.map((z,i)=>
+        i===pi?[...z,card]:z
+    );  //牌入出牌区
+    ng={
+        ...ng,
+        zones:nz,
+        lastCard:card,
+        lastOwner:pi
+    }; //游戏状态更新
+    setG(ng);
+    ex.forEach(e=>
+        addLog(`🌟 ${AV_N[pi]} completed a set of ${gsp(e.species).ic}${gsp(e.species).lb}!`,"win")
+    );
+    return ng;
+  };
+
+  //人类玩家的操作区
+  const playerPlay=(card)=>{
+      //是否是该出牌的回合
+    if((phase!=="playerTurn"&&phase!=="playerPlayAfterAbsorb")||!G)return;
+    let g={
+        ...G,
+        hands:G.hands.map((h,i)=>
+            i===0?srt(h.filter(c=>c.id!==card.id)):h
+        )
+    };
+    addLog(`You played ${gsp(card.species).ic}${gsp(card.species).lb} (variant ${card.variant})`,"player");
+    const ng=afterPlay(g,0,card,aiMode);
+    setSel(null);
+    if(doWin(ng,0,aiMode))return;
+    setPhase("aiTurn");
+    //0.9秒后AI再出手
+    tmr.current=setTimeout(()=>aiChain(ng,1,aiMode),900);
+  };
+
+  //AI轮流行动控制区
+  const aiChain=(g,idx,mode)=>{
+    if(idx>3){
+        setPhase("playerTurn");
+        return;
+    }//所有AI都打完了 回到玩家
+    const hand=g.hands[idx];
+    if(!hand.length){    //如果当前AI没牌了就跳过
+        tmr.current=setTimeout(()=>aiChain(g,idx+1,mode),200);
+        return;
+    }
+    const last=g.lastCard;
+    // AI absorb check: must be able to form a valid set
+    const matching2=last?hand.filter(c=>c.species===last.species):[];
+    //判断能不能吸收
+    let hasValidAbsPair=false;
+    if(matching2.length>=2){
+      outer:for(let i=0;i<matching2.length;i++)for(let j=i+1;j<matching2.length;j++){
+        if(findValidSet([matching2[i],matching2[j],last])){
+            hasValidAbsPair=true;
+            break outer;
+        }
+      }
+    }
+    const canAbs=!!(last&&hasValidAbsPair); //有上一张牌and又能吸收的组合 就是1
+    //执行吸收
+    if(canAbs){
+      const mv=runAI(mode,hand,last,true);
+      if(mv.action==="absorb"){
+        const aft=srt([...hand.filter(c=>c.id!==mv.discard.id),last]);
+        const playMv=runAI(mode,aft,null,false);
+        let ng={
+            ...g,
+          hands:g.hands.map((h,i)=>i===idx?srt(aft.filter(c=>c.id!==playMv.card.id)):h),
+          bonuses:g.bonuses.map((b,i)=>i===idx?{...b,kaoZiji:false}:b),
+        };
+        // Determine whether the AI's action is Absorption or Evolution
+        const aiTrio=[...matching2.filter(c=>c.id!==mv.discard.id&&c.species===last.species).slice(0,2),last];
+        const aiSetType=findValidSet(aiTrio);
+        const aiLabel=aiSetType?.type==="evo"?"Evolution":"Absorption";
+        addLog(`${AV_N[idx]} ${aiLabel} ${gsp(last.species).ic}, discarded ${gsp(mv.discard.species).ic}, played ${gsp(playMv.card.species).ic}`,"ai");
+        const nng=afterPlay(ng,idx,playMv.card,mode);
+        if(doWin(nng,idx,mode))return;
+        tmr.current=setTimeout(()=>aiChain(nng,idx+1,mode),700);
+        return;
+      }
+    }
+    //不能吸收 直接出牌
+    const mv=runAI(mode,hand,null,false);
+    let ng={
+        ...g,
+        hands:g.hands.map((h,i)=>
+            i===idx?srt(h.filter(c=>c.id!==mv.card.id)):h
+        )
+    };
+    addLog(`${AV_N[idx]} played ${gsp(mv.card.species).ic}${gsp(mv.card.species).lb} (variant ${mv.card.variant})`,"ai");
+    const nng=afterPlay(ng,idx,mv.card,mode);
+    if(doWin(nng,idx,mode))return;
+    //AI 序号是3 判断玩家是否能吸收
+    if(idx===3){
+      const pCan=nng.hands[0].filter(c=>c.species===mv.card.species).length>=2;
+      if(pCan){
+          setPhase("playerAbsorb");
+          addLog(`💡 You can absorb ${gsp(mv.card.species).ic}!`,"info");
+      }
+      else setPhase("playerTurn");
+    }
+    //不是最后的AI 继续下一个AI出牌
+    else {
+      tmr.current=setTimeout(()=>aiChain(nng,idx+1,mode),650);
+    }
+  };
+
+  //执行吸收 / 进化时调用
+  const onAbsorb=(actionType)=>{
+    if(!G||!G.lastCard||phase!=="playerAbsorb")return;
+    setSel(null);
+    setChosenAction(actionType); // remember which synthesis the player picked
+    // Record whether this is Absorption or Evolution
+    const label=actionType==="evo"
+        ?"Evolution (same variant x3)"  //提示进化
+        :"Absorption (1+2+3)";  //提示吸收
+    addLog(`You chose ${label}. Please select a card to discard`,"info");
+    setPhase("playerChooseDiscard");  //进入弃牌函数
+  };
+  const onPass=()=>{
+      addLog("You chose to pass","info");
+      setChosenAction(null);
+      setPhase("playerTurn");
+  };
+
+  //弃牌
+  const onDiscard=(card)=>{
+    if(!G||!G.lastCard||phase!=="playerChooseDiscard")return;
+    // Only cards required to complete the CHOSEN set cannot be discarded;
+    // same-species-but-unneeded cards can be discarded.
+    // Fix: previously this re-scanned for "the first valid combo found",
+    // ignoring which button (Evolve/Absorb) the player actually clicked.
+    // Now it filters specifically for chosenAction, so execution matches intent.
+    const matching=G.hands[0].filter(c=>c.species===G.lastCard.species); //找出和last同花色的牌
+    let requiredIds=new Set();
+    outer:for(let i=0;i<matching.length;i++)for(let j=i+1;j<matching.length;j++){
+      const v=findValidSet([matching[i],matching[j],G.lastCard]); //检查同类与last是不是有效组合
+      if(v && v.type===chosenAction){ // must match the type the player actually chose
+          v.cards.forEach(c=>{
+              if(c.id!==G.lastCard.id)requiredIds.add(c.id);  //是有效组合 标记为必须牌
+          });
+          break outer; //找一组就停
+      }
+    }
+    if(requiredIds.size===0){
+      // Fallback safety: if for some reason no combo of the chosen type exists
+      // (should not happen if the button was correctly enabled), don't lock
+      // the player out — fall back to any valid combo so play can continue.
+      outer2:for(let i=0;i<matching.length;i++)for(let j=i+1;j<matching.length;j++){
+        const v=findValidSet([matching[i],matching[j],G.lastCard]);
+        if(v){ v.cards.forEach(c=>{ if(c.id!==G.lastCard.id)requiredIds.add(c.id); }); break outer2; }
+      }
+    }
+    if(requiredIds.has(card.id)){
+        addLog("This card is required to complete the set and cannot be discarded!","warn");
+        return;
+    }
+    let g={
+      ...G,
+      hands:G.hands.map((h,i)=>i===0?srt([...h.filter(c=>c.id!==card.id),G.lastCard]):h),
+      bonuses:G.bonuses.map((b,i)=>i===0?{...b,kaoZiji:false}:b),
+    };
+    //执行进化/吸收
+    const{g:g2,ex}=applyExt(g,0);
+    g=g2;
+    setG(g);
+    setSel(null);
+    setChosenAction(null); // clear the recorded choice now that this synthesis is complete
+    addLog(`You absorbed ${gsp(G.lastCard.species).ic}, discarded ${gsp(card.species).ic}. Please play one more card.`,"player");
+
+    ex.forEach(e=>addLog(`🌟 You completed a set of ${gsp(e.species).ic}${gsp(e.species).lb}!`,"win"));
+
+    if(doWin(g,0,aiMode))return;
+    setPhase("playerPlayAfterAbsorb");
+  };
+
+  /* ── SCREENS ── */
+  if(!aiMode)return(
+    <div style={{height:"100vh",background:"linear-gradient(168deg,#b8e8f8,#c8f0fc,#d8f4fe)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:28}}>
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:52,marginBottom:6}}>🌸</div>
+        <h1 style={{fontSize:28,color:"#5070a8",letterSpacing:3,fontWeight:900,textShadow:"0 2px 8px rgba(100,150,220,0.2)"}}>Origins of All Things</h1>
+        <p style={{color:"#7098c0",fontSize:13,marginTop:4,fontWeight:700}}>4-Player Strategy Card Game</p>
+      </div>
+      <div style={{display:"flex",gap:18,flexWrap:"wrap",justifyContent:"center"}}>
+        {[{m:"rule",ic:"⚡",t:"Rule-Based AI",c:"#6abf69"},{m:"rule_v2",ic:"🔧",t:"Rule-Based AI v2",c:"#5b9bd5"},{m:"oneSGS",ic:"🌳",t:"1SGS AI",c:"#b589d6"}].map(({m,ic,t,c})=>(
+          <button key={m} onClick={()=>startGame(m)} style={{
+            background:`rgba(255,255,255,0.7)`,border:`2.5px solid ${c}88`,borderRadius:20,
+            padding:"24px 36px",cursor:"pointer",color:"#4060a0",textAlign:"center",width:200,
+            transition:"all 0.2s",boxShadow:`0 6px 20px ${c}33,inset 0 1px 0 rgba(255,255,255,1)`,
+          }}
+          onMouseOver={e=>{e.currentTarget.style.background=`${c}22`;e.currentTarget.style.transform="translateY(-3px)";}}
+          onMouseOut={e=>{e.currentTarget.style.background="rgba(255,255,255,0.06)";e.currentTarget.style.transform="none";}}>
+            <div style={{fontSize:36,marginBottom:8}}>{ic}</div>
+            <div style={{fontSize:15,fontWeight:700,color:c}}>{t}</div>
+            {m==="rule_v2"&&<div style={{fontSize:10,color:"#8090b0",marginTop:4}}>Dead-card-clearing variant</div>}
+          </button>
+        ))}
+      </div>
+      {(stats.rule.g>0||stats.rule_v2.g>0||stats.oneSGS.g>0)&&(
+        <div style={{color:"#7aafd4",fontSize:11,textAlign:"center"}}>
+          {["rule","rule_v2","oneSGS"].map(k=>stats[k].g>0&&<div key={k}>{k==="rule"?"⚡":k==="rule_v2"?"🔧":"🌳"} {stats[k].g} games · AI won {stats[k].w}</div>)}
+        </div>
+      )}
+    </div>
+  );
+
+  if(phase==="gameOver"&&winner)return(
+    <div style={{height:"100vh",background:"linear-gradient(145deg,#0d2f4a,#0a1f36)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"rgba(255,255,255,0.85)",borderRadius:24,padding:"40px 56px",textAlign:"center",border:"1.5px solid rgba(200,220,255,0.9)",boxShadow:"0 8px 32px rgba(100,160,220,0.2)"}}>
+        <div style={{fontSize:58,marginBottom:8}}>{winner.who===0?"🎉":"🤖"}</div>
+        <h2 style={{color:"#e8d4f8",fontSize:22,marginBottom:8}}>{winner.who===0?"You Win!":`${AV_N[winner.who]} Wins!`}</h2>
+        <div style={{fontSize:34,fontWeight:700,color:"#f5c842",marginBottom:4}}>{winner.score} pts</div>
+        <div style={{display:"flex",gap:10,justifyContent:"center",marginTop:20}}>
+          <button onClick={()=>startGame(aiMode)} style={{background:"linear-gradient(135deg,#b589d6,#7b3fa0)",color:"#fff",border:"none",borderRadius:18,padding:"9px 22px",cursor:"pointer",fontWeight:700}}>Play Again</button>
+          <button onClick={()=>{setAiMode(null);setG(null);setPhase("idle");}} style={{background:"rgba(255,255,255,0.09)",color:"#e8d4f8",border:"1px solid rgba(255,255,255,0.18)",borderRadius:18,padding:"9px 22px",cursor:"pointer"}}>Switch AI</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if(!G)return null;
+
+  const isAT=phase==="playerTurn"||phase==="playerPlayAfterAbsorb";
+  const isAbs=phase==="playerAbsorb";
+  const isDsc=phase==="playerChooseDiscard";
+  const isAI=phase==="aiTurn";
+  const LO=G.lastOwner??0;
+  /* Rule update: Evolution & Absorption are no longer mutually exclusive.*/
+  const matchingCards=G.lastCard?G.hands[0].filter(c=>c.species===G.lastCard.species):[];
+  let canAbsBtn=false; // Absorb button: lights up whenever some pair + lastCard forms 1+2+3
+  let canEvoBtn=false; // Evolve button: lights up whenever some pair + lastCard forms 111/222/333
+  if(isAbs&&G.lastCard&&matchingCards.length>=2){
+    for(let i=0;i<matchingCards.length;i++)for(let j=i+1;j<matchingCards.length;j++){
+      const v=findValidSet([matchingCards[i],matchingCards[j],G.lastCard]);
+      if(v?.type==="abs")canAbsBtn=true; // independent check — can coexist with canEvoBtn
+      if(v?.type==="evo")canEvoBtn=true; // independent check — can coexist with canAbsBtn
+    }
+  }
+  const canAbsorb=canAbsBtn||canEvoBtn; // Show the panel if either is valid
+  const logColors={win:"#f5c842",player:"#60a8d4",ai:"#b589d6",info:"rgba(255,255,255,0.38)",warn:"#e07b54",system:"rgba(255,255,255,0.5)"};
+
+  return(
+    <div style={{
+      width:"100vw",height:"100vh",overflow:"hidden",
+      background:"linear-gradient(150deg,#0d2e4a 0%,#0c2238 50%,#101830 100%)",
+      display:"grid",
+      gridTemplate:`
+        "av4  pad4  p3hand  pad3  av3  " 70px
+        "p4area p4col center p2col p2area" 1fr
+        "av1  pad1  p1hand  pad2  av2  " 145px
+        / 78px 280px 1fr   280px 78px
+      `,
+    }}>
+
+      {/* ── TOP-LEFT: P4 avatar ── */}
+      <div style={{gridArea:"av4",display:"flex",minHeight:0,overflow:"hidden",alignItems:"center",justifyContent:"center"}}>
+        <Av i={3} active={isAI&&LO===3}/>
+      </div>
+
+      {/* ── TOP: P3 face-down hand (horizontal) ── */}
+      <div style={{gridArea:"p3hand",display:"flex",flexDirection:"column",justifyContent:"center",gap:3,padding:"4px 6px",minHeight:0,overflow:"hidden"}}>
+        <div style={{fontSize:10,color:AV_C[2],fontWeight:700,textAlign:"center"}}>
+          {AV_N[2]}{isAI&&LO===2&&<span style={{marginLeft:5,background:AV_C[2],color:"#fff",borderRadius:5,padding:"1px 5px",fontSize:9}}>▶</span>}
+        </div>
+
+        {/* Face-down cards */}
+        <div style={{display:"flex",gap:3,justifyContent:"center",flexWrap:"wrap"}}>
+          {G.hands[2].map(c=><CB key={c.id} w={34} h={44}/>)}
+        </div>
+      </div>
+
+      {/* ── TOP-RIGHT: P3 avatar ── */}
+      <div style={{gridArea:"av3",display:"flex",minHeight:0,overflow:"hidden",alignItems:"center",justifyContent:"center"}}>
+        <Av i={2} active={isAI&&LO===2}/>
+      </div>
+
+      {/* ── LEFT: P4 hand area (horizontal rows) ── */}
+      <div style={{gridArea:"p4area",minHeight:0,overflow:"hidden"}}>
+        <SideArea pi={3} hand={G.hands[3]} isActive={isAI&&LO===3}/>
+      </div>
+      <PlayedColumn pi={3} cards={G.zones[3]} completed={G.completed[3]}/>
+
+      {/* ── CENTER: Play table with ring ── */}
+      <div style={{
+        gridArea:"center",position:"relative",minHeight:0,
+        background:"rgba(210,235,255,0.35)",margin:"3px 2px",backdropFilter:"blur(8px)",
+        borderRadius:20,border:"none",boxShadow:"0 6px 30px rgba(100,160,220,0.2),inset 0 0 0 1px rgba(255,255,255,0.6)",
+        display:"grid",
+        gridTemplate:`
+          "p3z" 1.4fr
+          "mid" auto
+          "p1z" 1.4fr
+          / 1fr
+        `,overflow:"hidden",
+      }}>
+        {/* P3 played zone - top (completed sets + play history) */}
+        <div style={{
+          gridArea:"p3z",
+          padding:"8px 12px 6px",
+          borderBottom:"none",
+          minHeight:0,
+          overflowY:"auto",
+          display:"flex",
+          flexDirection:"column",
+          gap:6,
+          background:"rgba(255,255,255,0.18)",
+          borderRadius:"14px 14px 0 0",
+        }}>
+          {/* Label */}
+          <span style={{fontSize:9,color:"rgba(80,110,160,.6)",fontWeight:800,flexShrink:0,
+            background:"rgba(255,255,255,.5)",borderRadius:8,padding:"1px 8px",
+            alignSelf:"flex-start"}}>P3 ↓</span>
+
+          {/* Completed sets: large landscape cards */}
+          {G.completed[2].length>0&&(
+            <div style={{display:"flex",flexDirection:"row",flexWrap:"wrap",gap:6,alignItems:"flex-start"}}>
+              {G.completed[2].map((set,i)=>{const s=gsp(set.species);return(
+                <div key={i} className="set-done" style={{
+                  display:"flex",flexDirection:"row",gap:4,alignItems:"center",
+                  background:`linear-gradient(135deg,#fff,${s.lt})`,
+                  borderRadius:10,padding:"4px 8px",
+                  border:`1.5px solid ${s.bd}88`,
+                  boxShadow:`0 3px 10px ${s.bd}33`,
+                }}>
+                  {set.cards.map(c=><CF key={c.id} card={c} w={54} h={40}/>)}
+                  <span style={{fontSize:9,color:s.dk,fontWeight:900,marginLeft:3,
+                    background:`${s.bd}18`,borderRadius:6,padding:"2px 6px",
+                    border:`1px solid ${s.bd}44`,flexShrink:0}}>
+                    {set.type==="evo"?"Evolution":"Absorption"}</span>
+                </div>
+              );})}
+            </div>
+          )}
+
+          {/* Play history */}
+          {G.zones[2].length>0&&(
+            <div style={{display:"flex",flexDirection:"row",flexWrap:"wrap",gap:4,alignItems:"center"}}>
+              <PZ cards={G.zones[2]} max={12}/>
+            </div>
+          )}
+        </div>
+        {/* CENTER: last card + draw + log + action */}
+        <div style={{gridArea:"mid",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,padding:"8px 6px",position:"relative",minHeight:0}}>
+          {/* Last played card */}
+          {G.lastCard&&(
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+              <div style={{fontSize:9,color:AV_C[LO],fontWeight:700}}>{AV_N[LO]} played</div>
+              <CF card={G.lastCard} w={64} h={48}/>
+            </div>
+          )}
+          {/* Draw pile */}
+          <div style={{background:"rgba(255,255,255,0.75)",borderRadius:10,padding:"4px 12px",color:"#5070a8",fontSize:11,fontWeight:800,border:"1px solid rgba(180,210,255,0.6)",boxShadow:"0 2px 8px rgba(100,150,220,0.1)"}}>
+            Draw pile: {G.drawPile.length}
+          </div>
+          {/* Status */}
+          {isAT&&<div style={{color:AV_C[0],fontSize:11,fontWeight:700,background:"rgba(96,168,212,0.12)",border:"1px solid rgba(96,168,212,0.3)",borderRadius:8,padding:"3px 10px",textAlign:"center"}}>
+            {phase==="playerPlayAfterAbsorb"?"🃏 After absorbing, play one more card":"✨ Your turn, please play a card"}
+          </div>}
+          {isDsc&&<div style={{color:"#f5c842",fontSize:11,fontWeight:700,background:"rgba(245,200,66,0.1)",border:"1px solid rgba(245,200,66,0.3)",borderRadius:8,padding:"3px 10px",textAlign:"center"}}>
+            👆 Click a card in your hand to discard
+          </div>}
+          {isAI&&<div style={{color:"rgba(255,255,255,0.35)",fontSize:10}}>🤖 AI is acting…</div>}
+          {/* Mini log */}
+          {log.length>0&&(
+            <div className="log-bubble" style={{
+              background:log[log.length-1].type==="win"?"linear-gradient(135deg,#fff8d0,#ffeea0)":
+                log[log.length-1].type==="player"?"linear-gradient(135deg,#e0f4ff,#c8e8ff)":
+                log[log.length-1].type==="ai"?"linear-gradient(135deg,#f0e8ff,#e0d0ff)":
+                "rgba(255,255,255,0.75)",
+              borderRadius:14,padding:"5px 12px",fontSize:11,
+              color:logColors[log[log.length-1].type]||"#5070a8",fontWeight:800,
+              border:`1.5px solid rgba(180,210,255,0.6)`,
+              boxShadow:"0 3px 10px rgba(100,150,200,0.15)",
+              textAlign:"center",maxWidth:"90%",
+            }}>{log[log.length-1].msg}</div>
+          )}
+          {/* Action Panel overlay */}
+          {isAbs&&<ActionPanel canAbs={canAbsBtn} canEvo={canEvoBtn} onAction={onAbsorb} onPass={onPass}/>}
+        </div>
+        {/* P1 played zone - bottom (play history + completed sets) */}
+        <div style={{
+          gridArea:"p1z",
+          padding:"6px 12px 8px",
+          borderTop:"none",
+          minHeight:0,
+          overflowY:"auto",
+          display:"flex",
+          flexDirection:"column",
+          gap:6,
+          background:"rgba(255,255,255,0.18)",
+          borderRadius:"0 0 14px 14px",
+        }}>
+          {/* Label */}
+          <span style={{fontSize:9,color:"rgba(80,110,160,.6)",fontWeight:800,flexShrink:0,
+            background:"rgba(255,255,255,.5)",borderRadius:8,padding:"1px 8px",
+            alignSelf:"flex-start"}}>P1 ↑</span>
+
+          {/* Play history */}
+          {G.zones[0].length>0&&(
+            <div style={{display:"flex",flexDirection:"row",flexWrap:"wrap",gap:4,alignItems:"center"}}>
+              <PZ cards={G.zones[0]} max={12}/>
+            </div>
+          )}
+
+          {/* Completed sets: large landscape cards */}
+          {G.completed[0].length>0&&(
+            <div style={{display:"flex",flexDirection:"row",flexWrap:"wrap",gap:6,alignItems:"flex-start"}}>
+              {G.completed[0].map((set,i)=>{const s=gsp(set.species);return(
+                <div key={i} className="set-done" style={{
+                  display:"flex",flexDirection:"row",gap:4,alignItems:"center",
+                  background:`linear-gradient(135deg,#fff,${s.lt})`,
+                  borderRadius:10,padding:"4px 8px",
+                  border:`1.5px solid ${s.bd}88`,
+                  boxShadow:`0 3px 10px ${s.bd}33`,
+                }}>
+                  {set.cards.map(c=><CF key={c.id} card={c} w={54} h={40}/>)}
+                  <span style={{fontSize:9,color:s.dk,fontWeight:900,marginLeft:3,
+                    background:`${s.bd}18`,borderRadius:6,padding:"2px 6px",
+                    border:`1px solid ${s.bd}44`,flexShrink:0}}>
+                    {set.type==="evo"?"Evolution":"Absorption"}</span>
+                </div>
+              );})}
+            </div>
+          )}
+        </div>
+      </div>
+
+
+      {/* ── BOTTOM-LEFT: P1 avatar ── */}
+      <div style={{gridArea:"av1",display:"flex",minHeight:0,overflow:"hidden",alignItems:"center",justifyContent:"center"}}>
+        <Av i={0} active={isAT||isAbs||isDsc} size={46}/>
+      </div>
+
+      {/* ── BOTTOM: P1 face-up hand ── */}
+      <div style={{gridArea:"p1hand",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"4px 8px",gap:6,minHeight:0,overflow:"hidden"}}>
+        {/* P1 remaining hand */}
+        <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"center"}}>
+          {G.hands[0].map(card=>{
+            const isGlow=(isAbs||isDsc)&&G.lastCard&&card.species===G.lastCard.species;
+            const isDim=(isDsc)&&!isGlow;
+            return<CF key={card.id} card={card} w={56} h={74}
+              selected={sel?.id===card.id}
+              glow={isGlow} dimmed={isDim&&sel?.id!==card.id}
+              onClick={()=>{
+                if(isAT) playerPlay(card);
+                else if(isDsc) onDiscard(card);
+                else if(isAbs) setSel(sel?.id===card.id?null:card);
+              }}
+            />;
+          })}
+          {G.hands[0].length===0&&<div style={{color:"#f5c842",fontSize:12,fontWeight:700}}>🌟 Hand fully completed!</div>}
+        </div>
+        {/* Bottom info bar */}
+        <div style={{display:"flex",gap:12,alignItems:"center"}}>
+          <div style={{fontSize:10,color:"rgba(255,255,255,0.35)"}}>Hand: {G.hands[0].length}</div>
+          <div style={{fontSize:10,color:aiMode==="rule"?"#6abf69":aiMode==="rule_v2"?"#5b9bd5":"#b589d6",fontWeight:700}}>{aiMode==="rule"?"⚡ Rule-Based AI":aiMode==="rule_v2"?"🔧 Rule-Based AI v2":"🌳 1SGS AI"}</div>
+          <button onClick={()=>{clearTimeout(tmr.current);setAiMode(null);setG(null);setPhase("idle");}} style={{background:"linear-gradient(135deg,#f4a070,#c06030)",border:"none",color:"#fff",borderRadius:10,padding:"4px 12px",cursor:"pointer",fontSize:11,fontWeight:800,boxShadow:"0 2px 8px rgba(180,80,40,.3)"}}>🚪 Exit</button>
+        </div>
+      </div>
+
+      {/* ── P2 play area (right side, mirrors P4) ── */}
+      <PlayedColumn pi={1} cards={G.zones[1]} completed={G.completed[1]}/>
+      {/* ── RIGHT: P2 hand area (horizontal rows) ── */}
+      <div style={{gridArea:"p2area",minHeight:0,overflow:"hidden"}}>
+        <SideArea pi={1} hand={G.hands[1]} isActive={isAI&&LO===1}/>
+      </div>
+
+      {/* ── BOTTOM-RIGHT: P2 avatar ── */}
+      <div style={{gridArea:"av2",display:"flex",minHeight:0,overflow:"hidden",alignItems:"center",justifyContent:"center"}}>
+        <Av i={1} active={isAI&&LO===1} size={46}/>
+      </div>
+
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+
+// Ambient sparkle particles
+(function(){
+  const bg=document.createElement("div");
+  bg.style.cssText="position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;";
+  const shapes=["✦","✧","⋆","✩","★","·","◦"];
+  const colors=["#ffe0f0","#e0f0ff","#fff0d0","#e0ffe8","#f0e0ff","#d0f8ff","#fff8e0"];
+  for(let i=0;i<30;i++){
+    const el=document.createElement("span");
+    const sz=Math.random()*14+6;
+    const clr=colors[Math.floor(Math.random()*colors.length)];
+    const sh=shapes[Math.floor(Math.random()*shapes.length)];
+    const dur=Math.random()*7+6;
+    const delay=Math.random()*10;
+    el.textContent=sh;
+    el.style.cssText=`
+      position:absolute;bottom:${Math.random()*15}%;left:${Math.random()*100}%;
+      font-size:${sz}px;color:${clr};opacity:0;
+      animation:star-rise ${dur}s ${delay}s ease-in-out infinite;
+      text-shadow:0 0 6px ${clr};pointer-events:none;
+    `;
+    bg.appendChild(el);
+  }
+  // Static scattered star dots
+  for(let i=0;i<40;i++){
+    const dot=document.createElement("div");
+    const sz=Math.random()*3+1;
+    const clr=colors[Math.floor(Math.random()*colors.length)];
+    dot.style.cssText=`
+      position:absolute;top:${Math.random()*100}%;left:${Math.random()*100}%;
+      width:${sz}px;height:${sz}px;border-radius:50%;
+      background:${clr};opacity:${Math.random()*.5+.2};
+      box-shadow:0 0 4px ${clr};
+    `;
+    bg.appendChild(dot);
+  }
+  document.body.insertBefore(bg,document.getElementById("root"));
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Origins of All Things · Random Baseline Experiment</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',sans-serif;background:linear-gradient(168deg,#eef6ec,#f5faf3);min-height:100vh;color:#2a3a4a;}
+table{border-collapse:collapse;width:100%;}
+th,td{padding:8px 12px;text-align:center;border-bottom:1px solid #e0e8e0;font-size:13px;}
+th{background:#eef7ec;font-weight:700;color:#3a6a4a;}
+tr:hover{background:#f7fdf5;}
+button{font-family:inherit;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+
+
+const SPECIES = [
+  { id:"plant" }, { id:"star" }, { id:"butterfly" }, { id:"fruit" },
+  { id:"human" }, { id:"water" }, { id:"flower" },
+];
+const SPO = SPECIES.map(s=>s.id);
+
+function buildDeck(){
+    const d=[];
+    for(const s of SPECIES)
+        for(const v of[1,2,3])
+            for(let c=0;c<4;c++)
+                d.push({ species:s.id, variant:v, id:`${s.id}-${v}-${c}` });
+    return d;
+}
+
+function shuffle(a){
+    const r=[...a];
+    for(let i=r.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [r[i],r[j]]=[r[j],r[i]];
+    }
+    return r;
+}
+
+function srt(h){
+  return [...h].sort((a,b)=>{
+      const d=SPO.indexOf(a.species)-SPO.indexOf(b.species);
+      return d||a.variant-b.variant;
+  });
+}
+
+function getGrp(h){
+    const g={};
+    for(const c of h){
+        if(!g[c.species]) g[c.species]=[];
+        g[c.species].push(c);
+    }
+    return g;
+}
+
+function findValidSet(cards){
+    for(const v of[1,2,3]){
+        const same=cards.filter(c=>c.variant===v);
+        if(same.length>=3) return{type:"evo",cards:same.slice(0,3)};
+    }
+    const v1=cards.find(c=>c.variant===1),v2=cards.find(c=>c.variant===2),v3=cards.find(c=>c.variant===3);
+    if(v1&&v2&&v3) return{type:"abs",cards:[v1,v2,v3]};
+    return null;
+}
+
+function extractSets(hand){
+    const g=getGrp(hand);
+    const ext=[];
+    let nh=[...hand];
+    for(const[sp,cards]of Object.entries(g)){
+        if(cards.length>=3){
+            const valid=findValidSet(cards);
+            if(valid){
+                ext.push({ species:sp, type:valid.type, cards:valid.cards });
+                const ids=new Set(valid.cards.map(c=>c.id));
+                nh=nh.filter(c=>!ids.has(c.id));
+            }
+        }
+    }
+    return{ newHand:srt(nh), extracted:ext };
+}
+
+function checkWin(h,sets){
+    return h.length===0&&sets.length===3;
+}
+
+function calcScore(sets,bonus){
+    let b=10;
+    if(sets.every(s=>{
+        const vs=s.cards.map(c=>c.variant).sort();
+        return vs[0]===vs[1]&&vs[1]===vs[2];
+    }))b=Math.max(b,15);
+    if(bonus?.kaoZiji)b=Math.max(b,15);
+    if(bonus?.tianZhi)b=30;
+    return b;
+}
+
+/* ── Rule-Based AI (copied verbatim from simulation_en.html) ── */
+function ruleAI(hand,last,ca){
+    const g=getGrp(hand);
+    if(ca&&last){
+        const matching=hand.filter(c=>c.species===last.species);
+        if(matching.length>=2){
+            let bestPair=null;
+            for(let i=0;i<matching.length;i++)
+                for(let j=i+1;j<matching.length;j++){
+                    if(findValidSet([matching[i],matching[j],last])){
+                        bestPair=[matching[i],matching[j]];
+                        break;
+                    }
+                    if(bestPair) break;
+                }
+            if (bestPair) {
+                const keepIds = new Set([...bestPair.map(c => c.id), last.id]);
+                const discardPool = hand.filter(c => !keepIds.has(c.id));
+                if (discardPool.length > 0) {
+                    const poolGrp = getGrp(discardPool);
+                    const singletons = Object.entries(poolGrp).filter(([, a]) => a.length === 1);
+                    const pairs = Object.entries(poolGrp).filter(([, a]) => a.length === 2);
+                    let d;
+                    if (singletons.length) d = singletons[0][1][0];
+                    else if (pairs.length) d = pairs[0][1][0];
+                    else d = discardPool[0];
+                    return {action: "absorb", discard: d};
+                }
+            }
+        }
+    }
+    const sg=Object.entries(g).filter(([,a])=>a.length===1);
+    if(sg.length) return{action:"play",card:sg[0][1][0]};
+    const pr=Object.entries(g).filter(([,a])=>a.length===2);
+    if(pr.length) return{action:"play",card:pr[0][1][0]};
+    return{action:"play",card:hand[0]};
+}
+
+/* ── 1SGS(Greedy) AI — 1-ply greedy heuristic search
+   (copied verbatim from simulation_en.html; note this is NOT
+   textbook 1SGS, see simulation_en.html for the full terminology
+   discussion — kept here only as a short pointer, not repeated in
+   full to avoid this file drifting out of sync with that note) ── */
+function evalH(h){
+    const g=getGrp(h);
+    let s=0;
+    for(const[,cards]of Object.entries(g)){
+        const valid=findValidSet(cards);
+        if(valid){s+=100; continue;}
+        if(cards.length>=2){
+            const vc={};
+            cards.forEach(c=>{ vc[c.variant]=(vc[c.variant]||0)+1; });
+            const maxSame=Math.max(...Object.values(vc));
+            const uniq=Object.keys(vc).length;
+            if(maxSame>=2)s+=20;
+            if(uniq===2&&cards.length===2)s+=15;
+            if(uniq===3)s+=25;
+        } else s-=5;
+    }
+    return s;
+}
+function oneSGSAI(hand,last,ca){
+    let best=-Infinity,mv=null;
+    if(ca&&last){
+        const matching = hand.filter(c=>c.species===last.species);
+        if(matching.length>=2){
+            for(let i=0;i<matching.length;i++)
+                for(let j=i+1;j<matching.length;j++){
+                    if(findValidSet([matching[i],matching[j],last])){
+                        const keepIds=new Set([matching[i].id,matching[j].id,last.id]);
+                        for(const d of hand){
+                            if(keepIds.has(d.id))continue;
+                            const nh=[...hand.filter(c=>c.id!==d.id),last];
+                            const s=evalH(nh);
+                            if(s>best){ best=s; mv={action:"absorb",discard:d}; }
+                        }
+                    }
+                }
+        }
+    }
+    for(const card of hand){
+        const s=evalH(hand.filter(c=>c.id!==card.id));
+        if(s>best){ best=s; mv={action:"play",card}; }
+    }
+    return mv||{action:"play",card:hand[0]};
+}
+
+/* ══════════════════════════════════════════════════════════════
+   NEW: Random AI — the baseline control added in this file.
+
+   Design principle (per project discussion): no strategic judgement
+   at all. Whenever a decision is required, it enumerates the set of
+   LEGAL actions available at that point and picks uniformly at
+   random among them — nothing is scored, nothing is prioritised.
+
+   - If an absorb opportunity exists (last-played card completes a
+     valid set with two cards already in hand), the AI still takes
+     it — same as Rule-Based/1SGS, which also always absorb when
+     possible — but WHICH valid pair to use, and WHICH card to
+     discard afterwards, are both chosen uniformly at random from all
+     legal options, rather than by any priority rule or scoring
+     function. This keeps the action space directly comparable to the
+     other two AIs (all three always absorb when a valid set is
+     available) so the win-rate comparison isolates "how the choice
+     is made" rather than "whether the AI absorbs at all".
+   - Otherwise, it plays a uniformly random card from hand (no
+     singleton/pair prioritisation, unlike Rule-Based AI).
+   ══════════════════════════════════════════════════════════════ */
+function randomAI(hand,last,ca){
+    if(ca&&last){
+        const matching = hand.filter(c=>c.species===last.species);
+        if(matching.length>=2){
+            const validPairs=[];
+            for(let i=0;i<matching.length;i++)
+                for(let j=i+1;j<matching.length;j++){
+                    if(findValidSet([matching[i],matching[j],last]))
+                        validPairs.push([matching[i],matching[j]]);
+                }
+            if(validPairs.length){
+                const pair = validPairs[Math.floor(Math.random()*validPairs.length)];
+                const keepIds = new Set([...pair.map(c=>c.id), last.id]);
+                const discardPool = hand.filter(c=>!keepIds.has(c.id));
+                if(discardPool.length>0){
+                    const d = discardPool[Math.floor(Math.random()*discardPool.length)];
+                    return {action:"absorb", discard:d};
+                }
+            }
+        }
+    }
+    const card = hand[Math.floor(Math.random()*hand.length)];
+    return {action:"play", card};
+}
+
+function runAI(mode,h,l,ca){
+    return mode==="rule" ? ruleAI(h,l,ca) : mode==="oneSGS" ? oneSGSAI(h,l,ca) : randomAI(h,l,ca);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Single-game simulation engine — structurally identical to
+   simulateOneGame in simulation_en.html (same MAX_TURNS safety cap,
+   same absorb/play/draw/extract/win-check sequence), just extended
+   to track a third AI type ("random") in decisionTimesByType.
+   ══════════════════════════════════════════════════════════════ */
+const MAX_TURNS = 800;
+
+function simulateOneGame(aiTypes){
+  const deck = shuffle(buildDeck());
+  let hands = [srt(deck.slice(0,9)), srt(deck.slice(9,18)), srt(deck.slice(18,27)), srt(deck.slice(27,36))];
+  let drawPile = deck.slice(36);
+  let completed = [[],[],[],[]];
+  let bonuses = [{kaoZiji:true},{kaoZiji:true},{kaoZiji:true},{kaoZiji:true}];
+  let lastCard = null;
+
+  let decisionTimesByType = { rule:[], oneSGS:[], random:[] };
+  let absorbEvoCount = 0;
+  let turnCount = 0;
+  let winner = null;
+  let winnerScore = 0;
+
+  const drawCard = (pi) => {
+    if(drawPile.length===0) return;
+    const drawn = drawPile[0];
+    drawPile = drawPile.slice(1);
+    hands[pi] = srt([...hands[pi], drawn]);
+  };
+  const applyExtract = (pi) => {
+    const { newHand, extracted } = extractSets(hands[pi]);
+    if(extracted.length===0) return;
+    hands[pi] = newHand;
+    completed[pi] = [...completed[pi], ...extracted];
+    absorbEvoCount += extracted.length;
+  };
+  const checkWinner = (pi) => {
+    if(checkWin(hands[pi], completed[pi])){
+      winner = pi;
+      winnerScore = calcScore(completed[pi], bonuses[pi]);
+      return true;
+    }
+    return false;
+  };
+
+  let current = 0;
+
+  while(turnCount < MAX_TURNS){
+    turnCount++;
+    const mode = aiTypes[current];
+    const hand = hands[current];
+
+    if(hand.length===0){
+      current = (current+1)%4;
+      continue;
+    }
+
+    let acted = false;
+    if(lastCard){
+      const matching = hand.filter(c=>c.species===lastCard.species);
+      if(matching.length>=2){
+        let hasValid=false;
+        outer: for(let i=0;i<matching.length;i++) for(let j=i+1;j<matching.length;j++){
+          if(findValidSet([matching[i],matching[j],lastCard])){ hasValid=true; break outer; }
+        }
+        if(hasValid){
+          const t0 = performance.now();
+          const mv = runAI(mode, hand, lastCard, true);
+          decisionTimesByType[mode].push(performance.now()-t0);
+          if(mv.action==="absorb"){
+            const afterAbs = srt([...hand.filter(c=>c.id!==mv.discard.id), lastCard]);
+            const t1 = performance.now();
+            const playMv = runAI(mode, afterAbs, null, false);
+            decisionTimesByType[mode].push(performance.now()-t1);
+            hands[current] = srt(afterAbs.filter(c=>c.id!==playMv.card.id));
+            bonuses[current] = {...bonuses[current], kaoZiji:false};
+            drawCard(current);
+            applyExtract(current);
+            if(checkWinner(current)) break;
+            lastCard = playMv.card;
+            acted = true;
+          }
+        }
+      }
+    }
+
+    if(!acted){
+      const t0 = performance.now();
+      const mv = runAI(mode, hand, null, false);
+      decisionTimesByType[mode].push(performance.now()-t0);
+      hands[current] = srt(hand.filter(c=>c.id!==mv.card.id));
+      drawCard(current);
+      applyExtract(current);
+      if(checkWinner(current)) break;
+      lastCard = mv.card;
+    }
+
+    current = (current+1)%4;
+  }
+
+  const allTimes = [...decisionTimesByType.rule, ...decisionTimesByType.oneSGS, ...decisionTimesByType.random];
+  return {
+    winner,
+    winnerAiType: winner!==null ? aiTypes[winner] : null,
+    winnerScore,
+    totalTurns: turnCount,
+    avgDecisionTime: allTimes.length ? allTimes.reduce((a,b)=>a+b,0)/allTimes.length : 0,
+    absorbEvoCount,
+    timedOut: winner===null,
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Statistical testing — chi-square goodness-of-fit only. This is
+   sufficient for the baseline experiment's question ("does the win
+   split differ from an even 50/50?"); decision-time significance
+   testing already lives in simulation_en.html and is not repeated
+   here since this file's purpose is win-rate baselining, not
+   decision-cost comparison.
+   ══════════════════════════════════════════════════════════════ */
+function normalCDF(x){
+  const t = 1/(1+0.2316419*Math.abs(x));
+  const d = 0.3989423*Math.exp(-x*x/2);
+  let prob = d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));
+  return x>0 ? 1-prob : prob;
+}
+function chiSquarePValue(chi2,df){
+  if(chi2<=0) return 1;
+  const z=(Math.pow(chi2/df,1/3) - (1-2/(9*df))) / Math.sqrt(2/(9*df));
+  return 1-normalCDF(z);
+}
+function chiSquareGoodnessOfFit(observed){
+  const total=observed.reduce((a,b)=>a+b,0);
+  const k=observed.length;
+  const expected=total/k;
+  if(expected===0) return {chi2:null,df:k-1,p:null};
+  let chi2=0;
+  observed.forEach(o=>{ chi2 += (o-expected)**2/expected; });
+  const df=k-1;
+  const p=chiSquarePValue(chi2,df);
+  return {chi2,df,p,expected};
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Baseline matchups. Seats are reshuffled every game (random_vs_random
+   included as a sanity-check control: with no strategy on either
+   side, this should land at ~50/50 with no seat pattern).
+   ══════════════════════════════════════════════════════════════ */
+const MATCHUPS = [
+  { key:"rule_vs_random", label:"Rule-Based vs Random (baseline)", seats:["rule","random","rule","random"], typeA:"rule", typeB:"random" },
+  { key:"1SGS_vs_random", label:"1SGS (Greedy) vs Random (baseline)", seats:["oneSGS","random","oneSGS","random"], typeA:"oneSGS", typeB:"random" },
+  { key:"random_vs_random", label:"Random vs Random (sanity control)", seats:["random","random","random","random"], typeA:"random", typeB:null },
+];
+
+function runBatch(seats, n, onProgress){
+  const results = [];
+  const hasMixedTypes = new Set(seats).size > 1;
+  for(let i=0;i<n;i++){
+    const gameSeats = hasMixedTypes ? shuffle(seats) : seats;
+    results.push(simulateOneGame(gameSeats));
+    if(onProgress && i%10===0) onProgress(i+1,n);
+  }
+  return results;
+}
+
+function aggregate(matchup, results){
+  const total = results.length;
+  const timedOutCount = results.filter(r=>r.timedOut).length;
+  const valid = results.filter(r=>!r.timedOut);
+  const completionRate = total? (valid.length/total*100).toFixed(1) : "0.0";
+
+  const winsA = valid.filter(r=>r.winnerAiType===matchup.typeA).length;
+  const winRateA = valid.length ? (winsA/valid.length*100).toFixed(1) : "N/A";
+
+  let winRateB = "N/A", chiTest = null, flag = null;
+  if(matchup.typeB){
+    const winsB = valid.filter(r=>r.winnerAiType===matchup.typeB).length;
+    winRateB = valid.length ? (winsB/valid.length*100).toFixed(1) : "N/A";
+    chiTest = chiSquareGoodnessOfFit([winsA, winsB]);
+    // Sanity flag: if the strategic AI's win rate is not clearly and
+    // significantly above 50%, this points to a possible logic defect
+    // in that AI, per the pre-agreed fallback check.
+    if(chiTest.p!==null){
+      flag = (chiTest.p>=0.05 || Number(winRateA)<55)
+        ? "warn" : "ok";
+    }
+  }
+
+  const avgTurns = valid.length ? valid.reduce((a,r)=>a+r.totalTurns,0)/valid.length : 0;
+  const avgDecisionTime = valid.length ? valid.reduce((a,r)=>a+r.avgDecisionTime,0)/valid.length : 0;
+  const avgAbsorbEvo = valid.length ? valid.reduce((a,r)=>a+r.absorbEvoCount,0)/valid.length : 0;
+
+  return {
+    matchupKey: matchup.key, total, timedOutCount, completionRate,
+    winRateA, winRateB, chiTest, flag,
+    avgTurns: avgTurns.toFixed(1),
+    avgDecisionTime: avgDecisionTime.toFixed(3),
+    avgAbsorbEvo: avgAbsorbEvo.toFixed(2),
+    rawResults: results,
+  };
+}
+
+function analyzeControlGroupSeatBias(controlAgg){
+    if(!controlAgg) return null;
+    const valid = controlAgg.rawResults.filter(r=>!r.timedOut);
+    const seatWins = [0,0,0,0];
+    valid.forEach(r=>{ if(r.winner!==null) seatWins[r.winner]++; });
+    const chiTest = chiSquareGoodnessOfFit(seatWins);
+    return {
+        matchupKey: controlAgg.matchupKey,
+        validN: valid.length,
+        seatWins,
+        seatWinRates: seatWins.map(w=>valid.length?(w/valid.length*100).toFixed(1):"0.0"),
+        chiTest,
+    };
+}
+
+function downloadCSV(filename, rows){
+  const csv = rows.map(r=>r.map(c=>{
+    const s = String(c);
+    return s.includes(",")||s.includes('"') ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportSummaryCSV(allAggregates){
+  const header = ["Matchup","Total Games","Completion Rate (%)","Timed-Out Games","AI-A Win Rate (%)","AI-B (Random, if applicable) Win Rate (%)","chi2","p-value","Sanity Flag","Avg. Turns","Avg. Decision Time (ms)","Avg. Absorption/Evolution Count"];
+  const rows = [header];
+  allAggregates.forEach(a=>{
+    const matchup = MATCHUPS.find(m=>m.key===a.matchupKey);
+    rows.push([
+      matchup.label, a.total, a.completionRate, a.timedOutCount,
+      a.winRateA, a.winRateB,
+      a.chiTest?a.chiTest.chi2.toFixed(4):"N/A",
+      a.chiTest?(a.chiTest.p<0.000001?"<0.000001":a.chiTest.p.toFixed(6)):"N/A",
+      a.flag==="warn"?"WARNING: win rate not clearly above chance":a.flag==="ok"?"OK":"N/A",
+      a.avgTurns, a.avgDecisionTime, a.avgAbsorbEvo,
+    ]);
+  });
+  downloadCSV("baseline_summary_en.csv", rows);
+}
+
+function exportRawCSV(allAggregates){
+  const header = ["Matchup","Game #","Winning Seat (0-3)","Winning AI Type","Winning Score","Total Turns","Avg. Decision Time (ms)","Absorption/Evolution Count","Timed Out"];
+  const rows = [header];
+  allAggregates.forEach(a=>{
+    const matchup = MATCHUPS.find(m=>m.key===a.matchupKey);
+    a.rawResults.forEach((r,i)=>{
+      rows.push([matchup.label, i+1, r.winner??"", r.winnerAiType??"", r.winnerScore, r.totalTurns, r.avgDecisionTime.toFixed(3), r.absorbEvoCount, r.timedOut?"Yes":"No"]);
+    });
+  });
+  downloadCSV("baseline_raw_game_logs_en.csv", rows);
+}
+
+function exportRandomControlSeatBiasCSV(randomControlBias) {
+    if (!randomControlBias) return;
+    const rows=[["Matchup","Seat","Wins","Win Rate (%)"]];
+    randomControlBias.seatWins.forEach((w,i)=>{
+        rows.push(["Random vs Random (sanity control)", i, w, randomControlBias.seatWinRates[i]]);
+    });
+    rows.push([]);
+    rows.push(["Matchup","chi2","df","p-value"]);
+    rows.push(["Random vs Random (sanity control)", randomControlBias.chiTest.chi2.toFixed(4), randomControlBias.chiTest.df, randomControlBias.chiTest.p<0.000001?"<0.000001":randomControlBias.chiTest.p.toFixed(6)]);
+    downloadCSV("random_control_seat_bias_en.csv", rows);
+
+}
+
+/* ══════════════════════════════════════════════════════════════
+   App — independent UI, no shared state with simulation_en.html.
+   ══════════════════════════════════════════════════════════════ */
+function App(){
+  const [n, setN] = useState(500);
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState({matchup:"",current:0,total:0});
+  const [aggregates, setAggregates] = useState([]);
+  const [randomSeatBias,setRandomSeatBias]=useState(null);
+
+  const runAll = async () => {
+    setRunning(true);
+    setAggregates([]);
+    setRandomSeatBias(null);
+    const results = [];
+    for(const matchup of MATCHUPS){
+      setProgress({matchup:matchup.label,current:0,total:n});
+      await new Promise(r=>setTimeout(r,0));
+      const batch = runBatch(matchup.seats, n, (cur,tot)=>setProgress({matchup:matchup.label,current:cur,total:tot}));
+      results.push(aggregate(matchup, batch));
+      setAggregates([...results]);
+    }
+    const randomControl = results.find(r=>r.matchupKey==="random_vs_random");
+    setRandomSeatBias(analyzeControlGroupSeatBias(randomControl));
+    setRunning(false);
+  };
+
+  return (
+    <div style={{maxWidth:920,margin:"0 auto",padding:"30px 20px"}}>
+      <h1 style={{fontSize:22,color:"#2a5a3a",marginBottom:6,fontWeight:800}}>
+        🎲 Random Baseline Experiment
+      </h1>
+      <p style={{fontSize:13,color:"#5a8a6a",marginBottom:20,lineHeight:1.7}}>
+        Standalone control-group experiment. A Random AI (no strategic judgement — uniformly
+        random choice among legal actions) is tested against the Rule-Based AI and the
+        1SGS (Greedy) AI, with seats reshuffled every game to remove seat-position confounds.
+        This file is fully independent of simulation_en.html: it shares no code, state, or output
+        files with the main experiment.
+      </p>
+
+      <div style={{background:"#fff",borderRadius:16,padding:"18px 22px",marginBottom:20,boxShadow:"0 4px 16px rgba(100,180,130,0.12)"}}>
+        <label style={{fontSize:13,color:"#3a6a4a",fontWeight:700,marginRight:10}}>
+          Games per matchup:
+        </label>
+        <input type="number" min="10" max="20000" value={n} disabled={running}
+          onChange={e=>setN(Math.max(10,Math.min(20000,Number(e.target.value)||10)))}
+          style={{width:100,padding:"6px 10px",border:"1.5px solid #cfe4d6",borderRadius:8,fontSize:13,marginRight:16}}/>
+        <button onClick={runAll} disabled={running}
+          style={{background:running?"#a8c8b0":"#3a9d5f",color:"#fff",border:"none",borderRadius:10,padding:"9px 20px",fontSize:14,fontWeight:700,cursor:running?"default":"pointer"}}>
+          {running?"Running...":"▶ Run Baseline Experiments"}
+        </button>
+
+        {running && (
+          <div style={{marginTop:16}}>
+            <div style={{fontSize:13,color:"#5a8a6a",marginBottom:6}}>
+              Running: {progress.matchup} ({progress.current}/{progress.total} games)
+            </div>
+            <div style={{background:"#e4f4e8",borderRadius:8,height:10,overflow:"hidden"}}>
+              <div style={{
+                width:`${progress.total?progress.current/progress.total*100:0}%`,
+                height:"100%",background:"linear-gradient(90deg,#5bc78a,#3a9d5f)",
+                transition:"width 0.2s",
+              }}/>
+            </div>
+          </div>
+        )}
+      </div>
+        {aggregates.length===0 && !running && (
+            <div style={{textAlign:"center",color:"#9ac0a8",padding:"60px 20px",background:"#fff",borderRadius:16}}>
+                Click the button above to start.<br/>
+                Three matchups run in sequence: Rule-Based vs Random, 1SGS (Greedy) vs Random,
+                Random vs Random (sanity control).
+            </div>
+        )}
+
+        {aggregates.map(a=>{
+            const matchup = MATCHUPS.find(m=>m.key===a.matchupKey);
+            return (
+                <div key={a.matchupKey} style={{background:"#fff",borderRadius:16,padding:"18px 22px",marginBottom:16,boxShadow:"0 4px 16px rgba(100,180,130,0.1)"}}>
+                    <h3 style={{fontSize:16,color:"#2a5a3a",marginBottom:12,fontWeight:800}}>
+                        {matchup.label} <span style={{fontSize:12,color:"#9ac0a8",fontWeight:400}}>
+                        (total {a.total} games{a.timedOutCount>0?`, ${a.timedOutCount} timed out without a winner`:""})
+                        </span>
+                    </h3>
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Completion Rate</th>
+                            <th>{matchup.typeA==="rule"?"Rule-Based":matchup.typeA==="oneSGS"?"1SGS":"Random"} Win Rate</th>
+                            {matchup.typeB && <th>Random Win Rate</th>}
+                            <th>Avg. Turns</th>
+                            <th>Avg. Decision Time</th>
+                            <th>Avg. Absorption/Evolution Count</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr>
+                            <td style={{fontWeight:700,color:a.completionRate>=70?"#3d8b3d":a.completionRate>=40?"#c08020":"#c04040"}}>
+                                {a.completionRate}%
+                            </td>
+                            <td style={{color:"#3d8b3d",fontWeight:700}}>{a.winRateA}{a.winRateA!=="N/A"?"%":""}</td>
+                            {matchup.typeB && <td style={{color:"#8a7a3a",fontWeight:700}}>{a.winRateB}{a.winRateB!=="N/A"?"%":""}</td>}
+                            <td>{a.avgTurns} turns</td>
+                            <td>{a.avgDecisionTime} ms</td>
+                            <td>{a.avgAbsorbEvo}</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                    {a.chiTest && (
+                        <div style={{marginTop:12,padding:"10px 14px",background:a.flag==="warn"?"#fdf3ec":"#f0f8f2",borderRadius:10,fontSize:12.5,color:a.flag==="warn"?"#8a5a2a":"#3a6a4a",lineHeight:1.7}}>
+                            <b>Chi-square goodness-of-fit test (win split vs. even 50/50):</b>{" "}
+                            χ²={a.chiTest.chi2.toFixed(3)}, df={a.chiTest.df},{" "}
+                            <b style={{color:a.chiTest.p<0.05?"#3d8b3d":"#c04040"}}>
+                                p={a.chiTest.p<0.000001?"<0.000001":a.chiTest.p.toFixed(6)}
+                                {a.chiTest.p<0.05?" (significantly different from chance)":" (not significantly different from chance)"}
+                            </b>
+                            {a.flag==="warn" && (
+                                <div style={{marginTop:6}}>
+                                    ⚠️ Win rate is not clearly and significantly above 50%. Per the pre-agreed
+                                    fallback check, this suggests the AI's decision logic in this matchup may
+                                    have an issue worth investigating, rather than being reported as a clean
+                                    positive result.
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        })}
+
+
+
+        {randomSeatBias && !running && (
+            <div style={{background:"#fff",borderRadius:16,padding:"18px 22px",marginBottom:16,boxShadow:"0 4px 16px rgba(100,150,200,0.1)"}}>
+                <h3 style={{fontSize:16,color:"#2a4a6a",marginBottom:6,fontWeight:800}}>
+                    🪑 Random-vs-Random Seat Bias <span style={{fontSize:12,color:"#9ab0c4",fontWeight:400}}>
+              (same-AI-type control group, seat effect not confounded with AI type)
+            </span>
+                </h3>
+                <p style={{fontSize:12,color:"#7098c0",marginBottom:12}}>
+                    Uses the Random-vs-Random control group already collected above. Every seat
+                    in this group runs the same Random (no-strategy) AI, so any win-rate difference
+                    across seats can only reflect seat position itself.
+                </p>
+                <div style={{marginBottom:4}}>
+                    <b style={{fontSize:13}}>Random vs Random</b> — valid games: {randomSeatBias.validN}
+                    <table>
+                        <thead><tr><th>Seat 0</th><th>Seat 1</th><th>Seat 2</th><th>Seat 3</th></tr></thead>
+                        <tbody><tr>{randomSeatBias.seatWinRates.map((r,i)=><td key={i}>{r}%</td>)}</tr></tbody>
+                    </table>
+                    <div style={{fontSize:12,color:"#5a7a9a",marginTop:4}}>
+                        χ²={randomSeatBias.chiTest.chi2.toFixed(3)}, df={randomSeatBias.chiTest.df},{" "}
+                        <b style={{color:randomSeatBias.chiTest.p<0.05?"#c04040":"#3d8b3d"}}>
+                            p={randomSeatBias.chiTest.p<0.000001?"<0.000001":randomSeatBias.chiTest.p.toFixed(6)}
+                            {randomSeatBias.chiTest.p<0.05?" (significant seat effect)":" (no significant seat effect)"}
+                        </b>
+                    </div>
+                </div>
+                <button onClick={()=>exportRandomControlSeatBiasCSV(randomSeatBias)}
+                        style={{background:"#8858a8",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:13,fontWeight:700,cursor:"pointer",marginTop:10}}>
+                    🪑 Export Random Seat Bias CSV
+                </button>
+            </div>
+        )}
+
+        {aggregates.length===MATCHUPS.length && !running && (
+            <div style={{background:"#eef8f0",border:"1.5px solid #b8ddb6",borderRadius:14,padding:"16px 20px",fontSize:13,color:"#3d6b3d",lineHeight:1.8,marginBottom:16}}>
+                ✅ All baseline experiments complete!
+                <br/>1. Click "Export Summary CSV" for the three-matchup summary table.
+                <br/>2. Click "Export Raw Data CSV" for per-game records.
+                <br/>3. Expected gradient: Random ≈ 50% (sanity control) &lt; Rule-Based / 1SGS
+                win rate against Random. If any matchup shows the ⚠️ warning above, review that
+                AI's logic before citing the result.
+            </div>
+        )}
+
+        {aggregates.length>0 && !running && (
+            <div style={{marginBottom:20}}>
+                <button onClick={()=>exportSummaryCSV(aggregates)}
+                        style={{background:"#3a9d5f",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:13,fontWeight:700,cursor:"pointer",marginRight:8}}>
+                    📊 Export Summary CSV
+                </button>
+                <button onClick={()=>exportRawCSV(aggregates)}
+                        style={{background:"#e0954a",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                    📄 Export Raw Data CSV
+                </button>
+            </div>
+        )}
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+﻿Group,N (pooled),N Runs Pooled,chi2,df,p (exact),Cohen's w,Max |Deviation from 25%| (pp),Spread Max-Min (pp),Achieved Power (%)
+Mixed diagnostic (four-seat overall),36970,3,24.4567,3,0.000020,0.0257,1.03,1.76,99.2
+Control group - Rule-Based vs Rule-Based (control),37328,3,25.7233,3,0.000011,0.0263,1.04,1.71,99.4
+Control group - 1SGS vs 1SGS (control),36249,3,9.3543,3,0.024933,0.0161,0.45,0.88,73.0
+Random vs Random,4110,3,3.9971,3,0.261780,0.0312,1.03,2.04,N/A
