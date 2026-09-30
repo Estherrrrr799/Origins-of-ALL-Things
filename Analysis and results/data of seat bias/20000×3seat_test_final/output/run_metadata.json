@@ -1,0 +1,46 @@
+{
+  "script": "seat_bias_confirmatory_analysis.py (v2)",
+  "run_time_utc": "2026-08-11T17:30:12.994539+00:00",
+  "expected_n_runs": 3,
+  "environment": {
+    "python": "3.10.0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.15.3"
+  },
+  "mixed_diagnostic_files": [
+    {
+      "filename": "seat_diagnostic_results_en_batch1.csv",
+      "modified_time_utc": "2026-07-28T16:59:07.865871+00:00",
+      "size_bytes": 328
+    },
+    {
+      "filename": "seat_diagnostic_results_en_batch2.csv",
+      "modified_time_utc": "2026-07-28T17:01:54.859782+00:00",
+      "size_bytes": 328
+    },
+    {
+      "filename": "seat_diagnostic_results_en_batch3.csv",
+      "modified_time_utc": "2026-07-28T17:12:40.248510+00:00",
+      "size_bytes": 327
+    }
+  ],
+  "control_group_files": [
+    {
+      "filename": "control_group_seat_bias_en_batch1.csv",
+      "modified_time_utc": "2026-07-28T16:59:05.114034+00:00",
+      "size_bytes": 481
+    },
+    {
+      "filename": "control_group_seat_bias_en_batch2.csv",
+      "modified_time_utc": "2026-07-28T17:01:47.646380+00:00",
+      "size_bytes": 480
+    },
+    {
+      "filename": "control_group_seat_bias_en_batch3.csv",
+      "modified_time_utc": "2026-07-28T17:12:23.630440+00:00",
+      "size_bytes": 481
+    }
+  ],
+  "random_vs_random_source": "random_seat_bias_analysis.py output (table1/table2, 'Pooled' row) — computed separately, not re-derived here."
+}

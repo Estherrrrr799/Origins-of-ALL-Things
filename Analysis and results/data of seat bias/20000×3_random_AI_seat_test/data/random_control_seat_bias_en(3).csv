@@ -1,0 +1,8 @@
+﻿Matchup,Seat,Wins,Win Rate (%)
+Random vs Random (sanity control),0,315,22.7
+Random vs Random (sanity control),1,366,26.4
+Random vs Random (sanity control),2,379,27.3
+Random vs Random (sanity control),3,327,23.6
+
+Matchup,chi2,df,p-value
+Random vs Random (sanity control),8.1002,3,0.043240

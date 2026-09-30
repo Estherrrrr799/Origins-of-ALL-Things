@@ -1,0 +1,5 @@
+﻿Batch,Total Games,Valid (Completed) Games,Timed-Out Games,Completion Rate (%)
+Batch 1,20000,1330,18670,6.7
+Batch 2,20000,1391,18609,7.0
+Batch 3,20000,1387,18613,6.9
+Pooled,60000,4108,55892,6.85

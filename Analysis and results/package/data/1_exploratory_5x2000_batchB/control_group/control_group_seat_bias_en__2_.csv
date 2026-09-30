@@ -1,0 +1,13 @@
+﻿Matchup,Seat,Wins,Win Rate (%)
+Rule-Based vs Rule-Based (control),0,326,26.5
+Rule-Based vs Rule-Based (control),1,318,25.8
+Rule-Based vs Rule-Based (control),2,303,24.6
+Rule-Based vs Rule-Based (control),3,284,23.1
+Minimax vs Minimax (control),0,323,26.6
+Minimax vs Minimax (control),1,303,24.9
+Minimax vs Minimax (control),2,291,23.9
+Minimax vs Minimax (control),3,299,24.6
+
+Matchup,chi2,df,p-value
+Rule-Based vs Rule-Based (control),3.3298,3,0.343784
+Minimax vs Minimax (control),1.8289,3,0.612781

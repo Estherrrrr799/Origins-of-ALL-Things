@@ -1,0 +1,4 @@
+﻿Matchup,Total Games,Completion Rate (%),Timed-Out Games,AI-A Win Rate (%),"AI-B (Random, if applicable) Win Rate (%)",chi2,p-value,Sanity Flag,Avg. Turns,Avg. Decision Time (ms),Avg. Absorption/Evolution Count
+Rule-Based vs Random (baseline),20000,41.6,11685,93.7,6.3,6365.0782,<0.000001,OK,31.1,0.001,6.93
+1SGS (Greedy) vs Random (baseline),20000,39.5,12102,93.3,6.7,5913.3396,<0.000001,OK,30.9,0.007,6.91
+Random vs Random (sanity control),20000,6.9,18613,100.0,N/A,N/A,N/A,N/A,33.2,0.000,6.59

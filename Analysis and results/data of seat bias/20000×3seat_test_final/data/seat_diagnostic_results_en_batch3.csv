@@ -1,0 +1,10 @@
+﻿Seat,Identity,Wins,Win Rate (%)
+0,Rule-Based AI1,2990,24.5
+1,1SGS AI1,3124,25.6
+2,Rule-Based AI2,3123,25.6
+3,1SGS AI2,2969,24.3
+
+Test,chi2,df,p-value
+Four-seat overall goodness-of-fit test,6.8678,3,0.074880
+Rule-Based AI1(seat0) vs Rule-Based AI2(seat2),2.8937,1,0.084880
+1SGS AI1(seat1) vs 1SGS AI2(seat3),3.9430,1,0.044433

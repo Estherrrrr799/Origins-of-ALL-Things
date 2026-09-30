@@ -1,0 +1,61 @@
+{
+  "script": "random_seat_bias_analysis.py (v3)",
+  "script_run_time_utc": "2026-08-11T15:38:48.401951+00:00",
+  "scope": "Seat-position bias analysis for the Random-vs-Random (sanity control) matchup only. Rule-Based-vs-Random / 1SGS-vs-Random win-rate and decision-time data in the uploaded files were NOT analyzed here.",
+  "environment": {
+    "python": "3.10.0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.15.3",
+    "statsmodels": "0.14.6",
+    "matplotlib": "3.10.7"
+  },
+  "simulation_parameters_from_source_code": {
+    "deck_size": 84,
+    "species_count": 7,
+    "variants_per_species": 3,
+    "copies_per_variant": 4,
+    "cards_dealt_per_player": 9,
+    "max_turns_cap": 800,
+    "shuffle_algorithm": "Fisher-Yates",
+    "random_seed": "NOT FIXED - engine uses Math.random() with no seed; exact per-game reproduction is not possible by design. Only statistical (multi-batch) replication is meaningful."
+  },
+  "input_seat_bias_files": [
+    {
+      "filename": "random_control_seat_bias_en (1).csv",
+      "modified_time_utc": "2026-08-11T15:14:00.553696+00:00",
+      "size_bytes": 290
+    },
+    {
+      "filename": "random_control_seat_bias_en (2).csv",
+      "modified_time_utc": "2026-08-11T15:15:41.315274+00:00",
+      "size_bytes": 290
+    },
+    {
+      "filename": "random_control_seat_bias_en(3).csv",
+      "modified_time_utc": "2026-08-11T15:29:37.808374+00:00",
+      "size_bytes": 290
+    }
+  ],
+  "input_baseline_summary_files": [
+    {
+      "filename": "baseline_summary_en (1).csv",
+      "modified_time_utc": "2026-08-11T15:14:02.677914+00:00",
+      "size_bytes": 497
+    },
+    {
+      "filename": "baseline_summary_en (2).csv",
+      "modified_time_utc": "2026-08-11T15:15:43.863129+00:00",
+      "size_bytes": 497
+    },
+    {
+      "filename": "baseline_summary_en(3).csv",
+      "modified_time_utc": "2026-08-11T15:29:41.033798+00:00",
+      "size_bytes": 497
+    }
+  ],
+  "known_data_gaps": [
+    "No random seed exists to record - the simulation engine calls Math.random() with no fixed seed by design, so bit-exact game-by-game reproduction is not possible; only statistical (independent multi-batch) replication is meaningful.",
+    "The games-per-matchup UI parameter (n) used at run time is not stored in any exported CSV; it is inferred here only via Total Games in baseline_summary_en.csv when that file is provided."
+  ]
+}

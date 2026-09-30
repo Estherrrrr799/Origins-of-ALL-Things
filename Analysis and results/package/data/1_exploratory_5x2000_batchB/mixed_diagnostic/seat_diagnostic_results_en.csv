@@ -1,0 +1,10 @@
+﻿Seat,Identity,Wins,Win Rate (%)
+0,Rule-Based AI1,347,27.9
+1,Minimax AI1,284,22.8
+2,Rule-Based AI2,312,25.1
+3,Minimax AI2,300,24.1
+
+Test,chi2,df,p-value
+Four-seat overall goodness-of-fit test,6.9083,3,0.073545
+Rule-Based AI1(seat0) vs Rule-Based AI2(seat2),1.8589,1,0.168936
+Minimax AI1(seat1) vs Minimax AI2(seat3),0.4384,1,0.515344
