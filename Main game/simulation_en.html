@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Origins of All Things · AI Battle Data Collection</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',sans-serif;background:linear-gradient(168deg,#eaf4fb,#f4f8fc);min-height:100vh;color:#2a3a4a;}
+table{border-collapse:collapse;width:100%;}
+th,td{padding:8px 12px;text-align:center;border-bottom:1px solid #e0e8f0;font-size:13px;}
+th{background:#eef4fa;font-weight:700;color:#3a5a80;}
+tr:hover{background:#f7fafd;}
+button{font-family:inherit;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef } = React;
+
+/* ══════════════════════════════════════════════════════════════
+   Core rule logic below is identical to card-game.html (verified via render testing)
+   ══════════════════════════════════════════════════════════════ */
+
+const SPECIES = [
+  { id:"plant" }, { id:"star" }, { id:"butterfly" }, { id:"fruit" },
+  { id:"human" }, { id:"water" }, { id:"flower" },
+];
+const SPO = SPECIES.map(s=>s.id);
+const SP_LABEL = {plant:"Plant",star:"Star",butterfly:"Butterfly",fruit:"Fruit",human:"Human",water:"Water",flower:"Flower"};
+
+// 构建完整牌库
+function buildDeck(){
+    const d=[];
+    for(const s of SPECIES)
+        for(const v of[1,2,3])
+            for(let c=0;c<4;c++)
+                d.push({
+                    species:s.id,
+                    variant:v,
+                    id:`${s.id}-${v}-${c}`
+                });
+    return d;
+}
+
+// 洗牌函数 Fisher-Yates算法
+function shuffle(a){
+    const r=[...a];
+    for(let i=r.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [r[i],r[j]]=[r[j],r[i]];
+    }
+    return r;
+}
+
+// 排序
+function srt(h){
+  return [...h].sort((a,b)=>{
+      const d=SPO.indexOf(a.species)-SPO.indexOf(b.species);
+      return d||a.variant-b.variant;
+  });
+}
+
+// 按物种排序手牌
+function getGrp(h){
+    const g={};
+    for(const c of h){
+        if(!g[c.species])
+            g[c.species]=[];
+        g[c.species].push(c);
+    }
+    return g;
+}
+// 有效牌组检验 先找进化111222333 再找吸收1+2+3
+function findValidSet(cards){
+    for(const v of[1,2,3]){
+        const same=cards.filter(c=>c.variant===v);
+        if(same.length>=3)
+            return{type:"evo",cards:same.slice(0,3)
+            };
+    }
+    const v1=cards.find(c=>c.variant===1),v2=cards.find(c=>c.variant===2),v3=cards.find(c=>c.variant===3);
+    if(v1&&v2&&v3)
+        return{type:"abs",cards:[v1,v2,v3]
+        };
+    return null;
+}
+
+
+// 手牌中提取所有有效牌组，返回「剩余手牌 + 已完成牌组」
+function extractSets(hand){
+    const g=getGrp(hand);
+    const ext=[];
+    let nh=[...hand];
+    for(const[sp,cards]of Object.entries(g)){
+        if(cards.length>=3){
+            const valid=findValidSet(cards);
+            if(valid){
+                ext.push({
+                    species:sp,
+                    type:valid.type,
+                    cards:valid.cards
+                });
+                const ids=new Set(valid.cards.map(c=>c.id));
+                nh=nh.filter(c=>!ids.has(c.id));  //过滤器删选符合条件的留，不符合的不要
+            }
+        }
+    }
+    return{
+        newHand:srt(nh),
+        extracted:ext
+    };
+}
+
+// 胜利检测
+function checkWin(h,sets){
+    return h.length===0&&sets.length===3;  //手牌空了 + 正好合出 3 组 → 胜利
+}
+
+// 算得分
+function calcScore(sets,bonus){
+    let b=10;
+    if(sets.every(s=>{
+        const vs=s.cards.map(c=>c.variant).sort();
+        return vs[0]===vs[1]&&vs[1]===vs[2];
+    }))b=Math.max(b,15); //全进化组合15分
+    if(bonus?.kaoZiji)b=Math.max(b,15);
+    if(bonus?.tianZhi)b=30;
+    return b;
+}
+
+
+/* Discard logic update: The discard pool removes the restriction of "not of the same species as the devoured card",
+incorporates all non-essential cards (allowing the same species),
+and clears dead cards left by devoured species (redundant variants that cannot form effective combinations).
+The order of discarding in the discard pool:
+single cards take priority, followed by unfinished pairs, and finally the bottom-line strategy.  */
+/* 舍弃逻辑更新：舍弃池取消“与被吞噬卡牌不同物种”限制，纳入全部非必要卡牌（允许同一物种），清理被吞噬物种遗留死牌（无法组成有效组合的多余变体）。
+舍弃池丢弃顺序：单张卡牌优先，其次未完成的对子，最后兜底策略。 */
+/* ── AI逻辑板块 核心 ── */
+function ruleAI(hand,last,ca){
+    const g=getGrp(hand);
+    if(ca&&last){
+        //匹配和last同花色的所有手牌
+        const matching=hand.filter(c=>c.species===last.species);
+        if(matching.length>=2){
+            // Only absorb when it forms a valid set
+            let bestPair=null;
+            //遍历尝试与last能否有效组合
+            for(let i=0;i<matching.length;i++)
+                for(let j=i+1;j<matching.length;j++){
+                    if(findValidSet([matching[i],matching[j],last])){
+                        bestPair=[matching[i],matching[j]]; //能吸收成
+                        break;
+                    }
+                    if(bestPair)  //找到有效组合后 即bestPair不是null，立刻退出所有循环，不再继续找
+                        break;
+                }
+            //吸收完 从可丢的牌里-先丢单张-再丢对子- 最后兜底 优化的AI弃牌规则
+            if (bestPair) {
+                const keepIds = new Set([...bestPair.map(c => c.id), last.id]);
+                const discardPool = hand.filter(c => !keepIds.has(c.id));  // 保护盾 不会丢已合成的牌
+
+                if (discardPool.length > 0) {
+                    const poolGrp = getGrp(discardPool);
+                    const singletons = Object.entries(poolGrp).filter(([, a]) => a.length === 1);
+                    const pairs = Object.entries(poolGrp).filter(([, a]) => a.length === 2);
+
+                    let d;
+                    if (singletons.length) d = singletons[0][1][0];
+                    else if (pairs.length) d = pairs[0][1][0];
+                    else d = discardPool[0];
+
+                    return {action: "absorb", discard: d};
+                }
+            }
+            //找到了能absorb的组合进行弃牌
+            // if(bestPair){
+            //   const keepIds=new Set([...bestPair.map(c=>c.id),last.id]);
+            //   //丢弃不在组合里的牌 首先不是已合成的 其次不是同类型的
+            //   const d=hand.find(c=>!keepIds.has(c.id)&&c.species!==last.species);
+            //   if(d)
+            //       return{action:"absorb",discard:d};
+            // }
+
+        }
+    }
+    // Play the card that contributes least to a valid set (keep useful cards)
+    // Prioritise playing singleton cards not part of any potential set
+    const sg=Object.entries(g).filter(([,a])=>a.length===1); //找出单张的牌
+    if(sg.length)
+        return{action:"play",card:sg[0][1][0]};
+    //第二优先 两个成对 但不够3的牌
+    const pr=Object.entries(g).filter(([,a])=>a.length===2);
+    if(pr.length)
+        return{action:"play",card:pr[0][1][0]};
+    //都没有就打手牌的第一张
+    return{action:"play",card:hand[0]};
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   ruleAI_v2: a dead‑card‑clearing improved variant of Rule‑Based AI.
+Standalone function, does not overwrite original ruleAI, added as the third selectable AI mode.
+
+Motivation: Completion‑rate data shows about 60% of games cannot produce a winner within reasonable turns.
+The root cause is dead‑locked card groups: ≥3 hand cards of the same species, forming neither a valid evolve set nor a valid absorb set, e.g. 1+2+2.
+The original ruleAI only discards singleton cards and unfinished pairs, and will not actively break dead‑locked card groups, leaving dead cards stuck in hand indefinitely.
+
+Improvement logic: Before executing original discard logic, detect whether dead‑locked card groups exist in hand.
+If found, discard one surplus card of any variant appearing 2+ times within this group, converting the dead‑locked group into a pending valid pair.
+Example: 1+2+2 → discard one 2, leaving 1+2, which waits for variant 3 to form an absorb set.
+
+This remains pure rule‑based logic, only counting variant counts per species. No scoring or search is involved.
+Under Russell & Norvig taxonomy, it is still classified as a Simple Reflex Agent.
+
+Validated by A/B testing (2000 games per condition): significantly outperforms the original ruleAI.
+
+   ══════════════════════════════════════════════════════════════ */
+
+
+/* ══════════════════════════════════════════════════════════════
+ruleAI_v2：Rule‑Based AI 的死牌清理改良变体，独立函数，不覆盖原 ruleAI，作为第三种可选AI模式。
+动因：对局完成率数据显示约60%对局没法在合理回合分出胜负。根源是死锁卡牌组：同一物种手牌≥3张，但既不是合法进化组合，也不是合法吞噬组合，例：1+2+2。原版ruleAI只会舍弃单张卡牌、未完成的对子，不会主动拆开死锁卡牌组，废牌会一直卡在手里。
+优化逻辑：执行原有舍弃逻辑前，先检测手牌有没有死锁卡牌组。如果有，舍弃该组内重复2次及以上变体的一张多余卡牌，把死锁卡牌组转成可等待凑齐的有效对子。例：1+2+2 → 丢弃一张2，剩下1+2，等变体3就能凑吞噬组合。
+依旧是纯规则判定，只统计每个物种各变体数量，没有打分、搜索逻辑；依据Russell & Norvig分类，仍属于Simple Reflex Agent（简单反射智能体）。
+
+A/B测试验证（每组2000局）：性能显著优于原版ruleAI
+   ══════════════════════════════════════════════════════════════ */
+// 从手牌里找「死锁牌组」
+function findDeadGroup(hand){
+    const g=getGrp(hand);
+    for(const[sp,cards]of Object.entries(g)){
+        if(cards.length>=3 && !findValidSet(cards))
+            return {species:sp,cards};
+    }
+    return null;
+}
+// 从死锁组里挑一张该丢的牌
+function pickDeadCardToDiscard(deadGroup){
+    const byVariant={};
+    // 变体分组（类型/颜色/形态）
+    deadGroup.cards.forEach(c=>{
+        (byVariant[c.variant]=byVariant[c.variant]||[]).push(c);
+    });
+
+    const surplus=Object.values(byVariant).find(arr=>arr.length>=2);
+    return surplus ? surplus[0] : deadGroup.cards[0];
+}
+
+
+// 规则AI的升级版本
+function ruleAI_v2(hand,last,ca){
+    const g=getGrp(hand);
+    if(ca&&last){
+        const matching=hand.filter(c=>c.species===last.species);
+        if(matching.length>=2){
+            let bestPair=null;
+            outer: for(let i=0;i<matching.length;i++)
+                for(let j=i+1;j<matching.length;j++){
+                    if(findValidSet([matching[i],matching[j],last])){
+                        bestPair=[matching[i],matching[j]];
+                        break outer;
+                    }
+                }
+            if(bestPair){
+                const keepIds=new Set([...bestPair.map(c=>c.id),last.id]);
+                const discardPool=hand.filter(c=>!keepIds.has(c.id));
+                if(discardPool.length>0){
+                    const poolGrp=getGrp(discardPool);
+                    const singletons=Object.entries(poolGrp).filter(([,a])=>a.length===1);
+                    const pairs=Object.entries(poolGrp).filter(([,a])=>a.length===2);
+                    let d;
+                    if(singletons.length) d=singletons[0][1][0];
+                    else if(pairs.length) d=pairs[0][1][0];
+                    else d=discardPool[0];
+                    return {action:"absorb",discard:d};
+                }
+            }
+        }
+    }
+    // 先处理死锁牌组，再走普通逻辑
+    // New: check for and break up a dead group before regular singleton/pair logic
+    const dead=findDeadGroup(hand);
+    if(dead)
+        return {action:"play",card:pickDeadCardToDiscard(dead)};
+    // 没有死锁 → 按老规则出牌
+    const sg2=Object.entries(g).filter(([,a])=>a.length===1);
+    if(sg2.length)
+        return {action:"play",card:sg2[0][1][0]};
+    const pr2=Object.entries(g).filter(([,a])=>a.length===2);
+    if(pr2.length)
+        return {action:"play",card:pr2[0][1][0]};
+    return {action:"play",card:hand[0]};
+}
+
+/* ────────────────────────────────────────────────────────────
+   Search depth -- only the acting player's own candidate moves
+      are scored and the best one taken (1-ply); no opponent
+      response layer is expanded. Strictly speaking this is a
+      "greedy algorithm with a look-ahead-flavoured scoring
+      function".
+
+   evalH(h) is that heuristic scoring function: cards are grouped
+   by species; a completed valid set scores +100; near-complete
+   groups (2+ of the same variant, or all three variants present)
+   score partial credit; isolated singleton cards are penalised.
+   ──────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────
+   索深度——仅对当前玩家的候选行动进行打分并选择最优值（1层搜索）；
+      未扩展任何对手应对层。严格来说，这是一个
+      **带有前瞻式评分函数的贪心算法**。
+
+   evalH(h) 为启发式评分函数：
+   卡牌按物种分组；完成的有效组合得 +100 分；
+   接近完成的组合（同一变体≥2张，或三种变体均存在）给予部分分数；
+   孤立单张卡牌予以扣分。
+   ──────────────────────────────────────────────────────────── */
+
+function evalH(h){
+    const g=getGrp(h);
+    let s=0; //初始分数为0
+    //遍历每种可能出现的类型进行打分
+    for(const[,cards]of Object.entries(g)){
+        //能直接万物起源的
+        const valid=findValidSet(cards);
+        if(valid){s+=100;
+            continue;
+        }
+        //接近合成状态 即同物种有两个
+        if(cards.length>=2){
+            const vc={};
+            cards.forEach(c=>{
+                vc[c.variant]=(vc[c.variant]||0)+1;
+            }); // 变成这样 [1,1,2] → vc = {1:2, 2:1}
+
+            const maxSame=Math.max(...Object.values(vc));  //有几张
+            const uniq=Object.keys(vc).length;  //有几种
+
+            if(maxSame>=2)s+=20;       // 2 of same variant -> close to Evolution
+            if(uniq===2&&cards.length===2)s+=15; // 2 distinct variants -> close to Absorption
+            if(uniq===3)s+=25;         // all 3 variants present -> can Absorb
+        } else
+            s-=5; //有废牌扣五分
+    }
+    return s; //返回总分
+}
+
+
+//尝试所有能做的操作 选得分高的执行
+function oneSGSAI(hand,last,ca){
+    let best=-Infinity,mv=null; //记录最高分以及对应的动作
+    //尝试所有合法的吸收即看能匹配的牌
+    if(ca&&last){
+        const matching=hand.filter(c=>c.species===last.species);
+
+        if(matching.length>=2){
+            // Only consider absorb options that form a valid set
+            for(let i=0;i<matching.length;i++)
+                for(let j=i+1;j<matching.length;j++){
+                    //判断能不能变成有效组合
+                    if(findValidSet([matching[i],matching[j],last])){
+                        const keepIds=new Set([matching[i].id,matching[j].id,last.id]); //组合成功不能丢
+                        //遍历所有可丢弃的牌
+                        for(const d of hand){
+                            if(keepIds.has(d.id))continue; // 合成牌不能丢
+                            // 模拟丢弃d，吸收last-得到新手牌
+                            const nh=[...hand.filter(c=>c.id!==d.id),last];
+                            //打分
+                            const s=evalH(nh);
+                            //分高 更新新动作以及分数
+                            if(s>best){
+                                best=s;
+                                mv={action:"absorb",discard:d};
+                            }
+                        }
+                    }
+                }
+        }
+    }
+    //尝试打出 ‘每一张’
+    for(const card of hand){
+        const s=evalH(hand.filter(c=>c.id!==card.id));
+        if(s>best){
+            best=s;
+            mv={action:"play",card};
+        }
+    }
+    return mv||{action:"play",card:hand[0]};
+}
+function runAI(mode,h,l,ca){
+    return mode==="rule" ? ruleAI(h,l,ca) : mode==="rule_v2" ? ruleAI_v2(h,l,ca) : oneSGSAI(h,l,ca);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Single-game simulation engine (no UI, pure logic, synchronous)
+   aiTypes: array of length 4, e.g. ["rule","oneSGS","rule","oneSGS"]
+   ══════════════════════════════════════════════════════════════ */
+const MAX_TURNS = 800; // safety cap, prevents infinite loop (draw pile exhausted, no winner yet)
+
+function simulateOneGame(aiTypes){
+  const deck = shuffle(buildDeck());
+  let hands = [srt(deck.slice(0,9)), srt(deck.slice(9,18)), srt(deck.slice(18,27)), srt(deck.slice(27,36))];
+  let drawPile = deck.slice(36);
+  let completed = [[],[],[],[]];
+  let bonuses = [{kaoZiji:true},{kaoZiji:true},{kaoZiji:true},{kaoZiji:true}];
+  let lastCard = null;
+
+  // Decision times split by AI type (previously mixed into one array,
+  // which made a formal statistical comparison between types impossible)
+  let decisionTimesByType = { rule:[], oneSGS:[], rule_v2:[] };
+  let absorbEvoCount = 0; // total Absorption+Evolution triggers
+  let turnCount = 0;
+  let winner = null;
+  let winnerScore = 0;
+
+  const drawCard = (pi) => {
+    if(drawPile.length===0) return;
+    const drawn = drawPile[0];
+    drawPile = drawPile.slice(1);
+    hands[pi] = srt([...hands[pi], drawn]);
+  };
+  const applyExtract = (pi) => {
+    const { newHand, extracted } = extractSets(hands[pi]);
+    if(extracted.length===0) return;
+    hands[pi] = newHand;
+    completed[pi] = [...completed[pi], ...extracted];
+    absorbEvoCount += extracted.length;
+  };
+  const checkWinner = (pi) => {
+    if(checkWin(hands[pi], completed[pi])){
+      winner = pi;
+      winnerScore = calcScore(completed[pi], bonuses[pi]);
+      return true;
+    }
+    return false;
+  };
+
+  // Player 0 goes first, then cycles through 1,2,3
+  let current = 0;
+
+  while(turnCount < MAX_TURNS){
+    turnCount++;
+    const mode = aiTypes[current];
+    const hand = hands[current];
+
+    if(hand.length===0){
+      // Hand already empty but not won (should not happen in theory, since empty hand + 3 sets = win); skip
+      current = (current+1)%4;
+      continue;
+    }
+
+    // Check whether the last-played card can be absorbed/evolved
+    let acted = false;
+    if(lastCard){
+      const matching = hand.filter(c=>c.species===lastCard.species);
+      if(matching.length>=2){
+        let hasValid=false;
+        outer: for(let i=0;i<matching.length;i++) for(let j=i+1;j<matching.length;j++){
+          if(findValidSet([matching[i],matching[j],lastCard])){ hasValid=true; break outer; }
+        }
+        if(hasValid){
+          const t0 = performance.now();
+          const mv = runAI(mode, hand, lastCard, true);
+          decisionTimesByType[mode].push(performance.now()-t0);
+          if(mv.action==="absorb"){
+            const afterAbs = srt([...hand.filter(c=>c.id!==mv.discard.id), lastCard]);
+            const t1 = performance.now();
+            const playMv = runAI(mode, afterAbs, null, false);
+            decisionTimesByType[mode].push(performance.now()-t1);
+            hands[current] = srt(afterAbs.filter(c=>c.id!==playMv.card.id));
+            bonuses[current] = {...bonuses[current], kaoZiji:false};
+            drawCard(current);
+            applyExtract(current);
+            if(checkWinner(current)) break;
+            lastCard = playMv.card;
+            acted = true;
+          }
+        }
+      }
+    }
+
+    if(!acted){
+      const t0 = performance.now();
+      const mv = runAI(mode, hand, null, false);
+      decisionTimesByType[mode].push(performance.now()-t0);
+      hands[current] = srt(hand.filter(c=>c.id!==mv.card.id));
+      drawCard(current);
+      applyExtract(current);
+      if(checkWinner(current)) break;
+      lastCard = mv.card;
+    }
+
+    current = (current+1)%4;
+  }
+
+  const allTimes = [...decisionTimesByType.rule, ...decisionTimesByType.oneSGS, ...decisionTimesByType.rule_v2];
+  return {
+    winner,               // seat 0-3, or null (timed out, no winner)
+    winnerAiType: winner!==null ? aiTypes[winner] : null,
+    winnerScore,
+    totalTurns: turnCount,
+    decisionTimesByType,  // {rule:[...], oneSGS:[...]} raw per-move times, pooled later for significance testing
+    avgDecisionTime: allTimes.length ? allTimes.reduce((a,b)=>a+b,0)/allTimes.length : 0,
+    maxDecisionTime: allTimes.length ? Math.max(...allTimes) : 0,
+    absorbEvoCount,
+    timedOut: winner===null,
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Statistical significance testing
+   ══════════════════════════════════════════════════════════════ */
+
+// Standard normal CDF (Abramowitz & Stegun approximation, validated against known reference values)
+function normalCDF(x){
+  const t = 1/(1+0.2316419*Math.abs(x));
+  const d = 0.3989423*Math.exp(-x*x/2);
+  let prob = d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));
+  return x>0 ? 1-prob : prob;
+}
+
+// Mann-Whitney U test (two-tailed, normal approximation, with tie correction)
+// Used to compare two continuous, unpaired samples (e.g. decision times of the two AI types)
+// Rationale: decision time is bounded below by zero and right-skewed, violating the
+// normality assumption of a t-test; per standard test-selection guidance this calls
+// for a rank-based non-parametric test instead
+function mannWhitneyU(sample1, sample2){
+  const n1=sample1.length, n2=sample2.length;
+  if(n1===0||n2===0) return {U:null,z:null,p:null,n1,n2};
+  const combined=[...sample1.map(v=>({v,g:1})), ...sample2.map(v=>({v,g:2}))];
+  combined.sort((a,b)=>a.v-b.v);
+  const ranks=new Array(combined.length);
+  let i=0;
+  while(i<combined.length){
+    let j=i;
+    while(j<combined.length && combined[j].v===combined[i].v) j++;
+    const avgRank=(i+1+j)/2;
+    for(let k=i;k<j;k++) ranks[k]=avgRank;
+    i=j;
+  }
+  let R1=0;
+  for(let k=0;k<combined.length;k++) if(combined[k].g===1) R1+=ranks[k];
+  const U1=R1-n1*(n1+1)/2;
+  const U2=n1*n2-U1;
+  const U=Math.min(U1,U2);
+  const meanU=n1*n2/2;
+  const tieGroups={};
+  combined.forEach(c=>{tieGroups[c.v]=(tieGroups[c.v]||0)+1;});
+  let tieCorrection=0;
+  Object.values(tieGroups).forEach(t=>{tieCorrection+=(t**3-t);});
+  const N=n1+n2;
+  const stdU=Math.sqrt((n1*n2/12)*((N+1)-tieCorrection/(N*(N-1))));
+  const z=stdU>0 ? (U-meanU)/stdU : 0;
+  const p=Math.min(2*(1-normalCDF(Math.abs(z))),1);
+  return {U,U1,U2,z,p,n1,n2};
+}
+
+// Chi-square goodness-of-fit test: observed frequencies vs expected uniform distribution
+// Used for the seat-position win-rate diagnostic (if no positional advantage exists,
+// wins should be roughly evenly distributed across the four seats)
+function chiSquareGoodnessOfFit(observed){
+  const total=observed.reduce((a,b)=>a+b,0);
+  const k=observed.length;
+  const expected=total/k;
+  if(expected===0) return {chi2:null,df:k-1,p:null};
+  let chi2=0;
+  observed.forEach(o=>{ chi2 += (o-expected)**2/expected; });
+  const df=k-1;
+  const p=chiSquarePValue(chi2,df);
+  return {chi2,df,p,expected};
+}
+
+// Chi-square p-value (Wilson-Hilferty approximation, valid for common degrees of freedom)
+// Methodology note: this tool runs in the browser/Node without a statistics
+// library, so both this chi-square p-value and the Mann-Whitney U p-value
+// below are computed via normal approximation, not exact values. Checked
+// against known reference values (e.g. df=1, chi2=3.841 -> p≈0.05) and
+// against scipy's exact computation; the discrepancy is within the 3rd-4th
+// decimal place, which is reliable enough for a significance (p<0.05)
+// judgement, but for an exact p-value to cite verbatim in the dissertation
+// text, cross-check the raw CSV in R/Python/SPSS.
+function chiSquarePValue(chi2,df){
+  if(chi2<=0) return 1;
+  const z=(Math.pow(chi2/df,1/3) - (1-2/(9*df))) / Math.sqrt(2/(9*df));
+  return 1-normalCDF(z);
+}
+
+/* Known limitation (independence assumption for decision time):
+   The Mann-Whitney U test treats every per-move decision time within a
+   given AI type as an independent sample (Rule-Based AI alone contributes
+   ~5000+ such observations). But consecutive moves within the same game
+   are not strictly independent -- they come from the same, gradually
+   evolving hand of cards within one game, so there is within-game
+   clustering. This can make the sample look larger than its true
+   "independent information content", potentially understating the
+   p-value. A more conservative unit of analysis is the per-game average
+   decision time (roughly 300-2000 games), rather than per-move
+   (roughly 3000-10000+ moves). Given the ~8-10x gap between the two AI
+   types, recomputing at the per-game level almost certainly remains
+   significant, but this assumption should be disclosed explicitly in
+   the dissertation's Limitations section rather than assumed silently. */
+
+const MATCHUPS = [
+  { key:"rule_vs_1SGS", label:"Rule-Based vs 1SGS", seats:["rule","oneSGS","rule","oneSGS"] },
+  { key:"rule_vs_rule",    label:"Rule-Based vs Rule-Based (control)", seats:["rule","rule","rule","rule"] },
+  { key:"1SGS_vs_1SGS", label:"1SGS vs 1SGS (control)", seats:["oneSGS","oneSGS","oneSGS","oneSGS"] },
+];
+
+function runBatch(seats, n, onProgress){
+  const results = [];
+  const hasMixedTypes = new Set(seats).size > 1;
+  for(let i=0;i<n;i++){
+    // Key fix: reshuffle seat assignment every game in mixed matchups, eliminating the "fixed first-mover/seat" confound
+    // Pure same-type control groups (all-rule or all-1SGS) need no randomisation, since seats are already equivalent
+    const gameSeats = hasMixedTypes ? shuffle(seats) : seats;
+    results.push(simulateOneGame(gameSeats));
+    if(onProgress && i%10===0) onProgress(i+1,n);
+  }
+  return results;
+}
+
+function aggregate(matchupKey, seats, results){
+  const total = results.length;
+  const timedOutCount = results.filter(r=>r.timedOut).length;
+  const valid = results.filter(r=>!r.timedOut);
+  const completionRate = (valid.length/total*100).toFixed(1);
+
+  // Tally win rate by AI type (not by seat number)
+  const winsByType = { rule:0, oneSGS:0 };
+  valid.forEach(r=>{ winsByType[r.winnerAiType] = (winsByType[r.winnerAiType]||0)+1; });
+
+  const avgTurns = valid.length ? valid.reduce((a,r)=>a+r.totalTurns,0)/valid.length : 0;
+  const avgDecisionTime = valid.length ? valid.reduce((a,r)=>a+r.avgDecisionTime,0)/valid.length : 0;
+  const avgMaxDecisionTime = valid.length ? valid.reduce((a,r)=>a+r.maxDecisionTime,0)/valid.length : 0;
+  const avgAbsorbEvo = valid.length ? valid.reduce((a,r)=>a+r.absorbEvoCount,0)/valid.length : 0;
+  const avgScore = valid.length ? valid.reduce((a,r)=>a+r.winnerScore,0)/valid.length : 0;
+
+  const uniqueTypes = [...new Set(seats)];
+
+  // Pool the raw per-move decision times across all games, split by AI type, for
+  // the Mann-Whitney U test (chi-square only suits categorical count data such as
+  // win/loss tallies, not continuous timing data — see mannWhitneyU comment above)
+  let mwTest = null;
+  let mwTestPerGame = null; // Robustness check: analysis unit is "per-game average
+                             // decision time" rather than "per move", responding to
+                             // the within-game clustering concern noted above
+  if(uniqueTypes.includes("rule") && uniqueTypes.includes("oneSGS")){
+    const ruleTimes = valid.flatMap(r=>r.decisionTimesByType.rule);
+    const oneSGSTimes = valid.flatMap(r=>r.decisionTimesByType.oneSGS);
+    mwTest = mannWhitneyU(ruleTimes, oneSGSTimes);
+    mwTest.ruleMean = ruleTimes.length ? ruleTimes.reduce((a,b)=>a+b,0)/ruleTimes.length : 0;
+    mwTest.oneSGSMean = oneSGSTimes.length ? oneSGSTimes.reduce((a,b)=>a+b,0)/oneSGSTimes.length : 0;
+    mwTest.ruleN = ruleTimes.length;
+    mwTest.oneSGSN = oneSGSTimes.length;
+
+    const rulePerGame = valid.map(r=>{
+      const t=r.decisionTimesByType.rule;
+      return t.length? t.reduce((a,b)=>a+b,0)/t.length : null;
+    }).filter(v=>v!==null);
+    const oneSGSPerGame = valid.map(r=>{
+      const t=r.decisionTimesByType.oneSGS;
+      return t.length? t.reduce((a,b)=>a+b,0)/t.length : null;
+    }).filter(v=>v!==null);
+    mwTestPerGame = mannWhitneyU(rulePerGame, oneSGSPerGame);
+    mwTestPerGame.ruleN = rulePerGame.length;
+    mwTestPerGame.oneSGSN = oneSGSPerGame.length;
+    mwTestPerGame.rulePerGameArr = rulePerGame;       // exposed for CSV export (decision_times_by_type)
+    mwTestPerGame.oneSGSPerGameArr = oneSGSPerGame; // exposed for CSV export (decision_times_by_type)
+  }
+
+  // Cross-matchup pace-consistency records: supports the argument that turn
+  // count / absorb-evolve count show no systematic difference across matchup
+  // types. Previously this was only eyeballed from summary numbers; storing
+  // the raw per-game arrays here lets compareMatchupPace() run a formal test.
+  const turnsArr = valid.map(r=>r.totalTurns);
+  const absorbEvoArr = valid.map(r=>r.absorbEvoCount);
+
+  return {
+    matchupKey, seats, total, timedOutCount, completionRate,
+    winRateRule: uniqueTypes.includes("rule") ? (winsByType.rule/valid.length*100).toFixed(1) : "N/A",
+    winRateOneSGS: uniqueTypes.includes("oneSGS") ? (winsByType.oneSGS/valid.length*100).toFixed(1) : "N/A",
+    avgTurns: avgTurns.toFixed(1),
+    avgDecisionTime: avgDecisionTime.toFixed(3),
+    avgMaxDecisionTime: avgMaxDecisionTime.toFixed(3),
+    avgAbsorbEvo: avgAbsorbEvo.toFixed(2),
+    avgScore: avgScore.toFixed(1),
+    mwTest,
+    mwTestPerGame,
+    turnsArr,
+    absorbEvoArr,
+    rawResults: results,
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Control-group seat bias analysis
+   (Fixes a confound in runSeatDiagnostic below: that function fixes
+   seats to specific AI TYPES — seat0/2=rule, seat1/3=1SGS — so a
+   low win rate on any one seat could reflect either a seat effect
+   or an AI-type effect, and the two can never be told apart there,
+   since each AI type only ever occupies its assigned seats.
+
+   This function instead reuses the "Rule-Based vs Rule-Based" and
+   "1SGS vs 1SGS" control groups already collected by runAll.
+   Every seat in those matchups runs the SAME AI type, so any win-rate
+   difference across seats can only come from seat position itself —
+   AI type is held constant and cannot confound the result. No new
+   games need to be simulated; this just re-tallies wins by seat from
+   data already gathered as part of the main experiment.
+   ══════════════════════════════════════════════════════════════ */
+function analyzeControlGroupSeatBias(controlAgg){
+  if(!controlAgg) return null;
+  const valid = controlAgg.rawResults.filter(r=>!r.timedOut);
+  const seatWins = [0,0,0,0];
+  valid.forEach(r=>{ if(r.winner!==null) seatWins[r.winner]++; });
+  const chiTest = chiSquareGoodnessOfFit(seatWins);
+  return {
+    matchupKey: controlAgg.matchupKey,
+    validN: valid.length,
+    seatWins,
+    seatWinRates: seatWins.map(w=>valid.length?(w/valid.length*100).toFixed(1):"0.0"),
+    chiTest,
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Extension experiment: ruleAI_v2 (the dead-card-clearing variant,
+   see ruleAI_v2 above) tested against the original Rule-Based AI,
+   against 1SGS, and against itself as a control. Run separately
+   from the main three MATCHUPS so the primary comparison's results
+   are never mixed with this follow-up experiment.
+   ══════════════════════════════════════════════════════════════ */
+const EXTENSION_MATCHUPS = [
+  { key:"rule_v2_vs_rule", label:"Rule-Based AI v2 vs Rule-Based AI (original)", seats:["rule_v2","rule","rule_v2","rule"], typeA:"rule_v2", typeB:"rule" },
+  { key:"rule_v2_vs_1SGS", label:"Rule-Based AI v2 vs 1SGS AI", seats:["rule_v2","oneSGS","rule_v2","oneSGS"], typeA:"rule_v2", typeB:"oneSGS" },
+  { key:"rule_v2_vs_rule_v2", label:"Rule-Based AI v2 vs Rule-Based AI v2 (control)", seats:["rule_v2","rule_v2","rule_v2","rule_v2"], typeA:"rule_v2", typeB:null },
+];
+
+function aggregateExtension(matchup, results){
+  const total = results.length;
+  const timedOutCount = results.filter(r=>r.timedOut).length;
+  const valid = results.filter(r=>!r.timedOut);
+  const completionRate = (valid.length/total*100).toFixed(1);
+
+  const winsA = valid.filter(r=>r.winnerAiType===matchup.typeA).length;
+  const winRateV2 = valid.length ? (winsA/valid.length*100).toFixed(1) : "N/A";
+
+  let winRateOpponent = "N/A", chiTest = null;
+  if(matchup.typeB){
+    const winsB = valid.filter(r=>r.winnerAiType===matchup.typeB).length;
+    winRateOpponent = valid.length ? (winsB/valid.length*100).toFixed(1) : "N/A";
+    chiTest = chiSquareGoodnessOfFit([winsA, winsB]);
+  }
+
+  return {
+    matchupKey: matchup.key, total, timedOutCount, completionRate,
+    winRateV2, winRateOpponent, chiTest, rawResults: results,
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Seat-level diagnostic: fixed seating (not randomised), tracking win
+   rate for four distinct identities — Rule-Based AI1(seat0) /
+   1SGS AI1(seat1) / Rule-Based AI2(seat2) / 1SGS AI2(seat3).
+   Purpose: measure whether seat position itself carries any advantage,
+   analysed separately from the AI-type comparison above (the earlier
+   seat randomisation was designed to ELIMINATE this factor from
+   contaminating the AI-type comparison; this instead directly MEASURES
+   the factor on its own).
+   ══════════════════════════════════════════════════════════════ */
+const SEAT_LABELS = ["Rule-Based AI1","1SGS AI1","Rule-Based AI2","1SGS AI2"];
+
+function runSeatDiagnostic(n){
+  const fixedSeats = ["rule","oneSGS","rule","oneSGS"]; // seats 0/1/2/3 fixed, never shuffled
+  const results = [];
+  for(let i=0;i<n;i++){
+    results.push(simulateOneGame(fixedSeats));
+  }
+  const valid = results.filter(r=>!r.timedOut);
+  const seatWins = [0,0,0,0];
+  valid.forEach(r=>{ if(r.winner!==null) seatWins[r.winner]++; });
+
+  const chiTest = chiSquareGoodnessOfFit(seatWins);
+
+  // Same-type cross-seat comparisons: Rule AI1(seat0) vs Rule AI2(seat2),
+  //                                   1SGS AI1(seat1) vs 1SGS AI2(seat3)
+  // If a same-type AI's win rate differs purely by seat, that indicates a seat effect
+  const ruleSeat0vs2 = chiSquareGoodnessOfFit([seatWins[0], seatWins[2]]);
+  const oneSGSSeat1vs3 = chiSquareGoodnessOfFit([seatWins[1], seatWins[3]]);
+
+  return {
+    n, validN: valid.length, timedOutCount: results.length-valid.length,
+    seatWins,
+    seatWinRates: seatWins.map(w=>(w/valid.length*100).toFixed(1)),
+    chiTest,
+    ruleSeat0vs2, oneSGSSeat1vs3,
+    rawResults: results,
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Cross-matchup pace-consistency test
+   (Fixes a prior methodology gap: the argument that "average turns /
+   absorb-evolve counts are similar across the three matchups, so no
+   AI type is artificially dragging games out" was previously only
+   eyeballed from summary numbers such as 29.3 vs 30.2 vs 29.3, never
+   formally tested. This runs pairwise Mann-Whitney U tests across the
+   three matchup types so that "ruling out a confound" argument is
+   actually backed by a significance test.)
+
+   Input: the array of aggregate() results (one per matchup type)
+   Output: pairwise Mann-Whitney U results for turn count and
+           absorption/evolution count across all matchup pairs
+   ══════════════════════════════════════════════════════════════ */
+function compareMatchupPace(allAggregates){
+  const byKey = {};
+  allAggregates.forEach(a=>{ byKey[a.matchupKey]=a; });
+  const pairs = [
+    ["rule_vs_1SGS","rule_vs_rule"],
+    ["rule_vs_1SGS","1SGS_vs_1SGS"],
+    ["rule_vs_rule","1SGS_vs_1SGS"],
+  ];
+  const turnsTests = {};
+  const absorbEvoTests = {};
+  pairs.forEach(([k1,k2])=>{
+    if(!byKey[k1]||!byKey[k2]) return;
+    const label = `${k1}_vs_${k2}`;
+    turnsTests[label] = mannWhitneyU(byKey[k1].turnsArr, byKey[k2].turnsArr);
+    absorbEvoTests[label] = mannWhitneyU(byKey[k1].absorbEvoArr, byKey[k2].absorbEvoArr);
+  });
+  return { turnsTests, absorbEvoTests };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CSV export
+   ══════════════════════════════════════════════════════════════ */
+function downloadCSV(filename, rows){
+  const csv = rows.map(r=>r.map(c=>{
+    const s = String(c);
+    return s.includes(",")||s.includes('"') ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportSummaryCSV(allAggregates){
+  const header = ["Matchup","Total Games","Completion Rate (%)","Timed-Out Games","Rule-Based Win Rate (%)","1SGS Win Rate (%)","Avg. Turns","Avg. Decision Time (ms)","Avg. Max Single-Move Decision Time (ms)","Avg. Absorption/Evolution Count","Avg. Winning Score","MannWhitneyU_Statistic(per-move)","MannWhitneyU_zValue(per-move)","MannWhitneyU_pValue(per-move)","RuleDecisionStepsN","1SGSDecisionStepsN","MannWhitneyU_pValue(per-game robust)","RuleGamesN","1SGSGamesN"];
+  const rows = [header];
+  allAggregates.forEach(a=>{
+    const matchup = MATCHUPS.find(m=>m.key===a.matchupKey);
+    const mw = a.mwTest;
+    const mwg = a.mwTestPerGame;
+    rows.push([
+      matchup.label, a.total, a.completionRate, a.timedOutCount, a.winRateRule, a.winRateOneSGS,
+      a.avgTurns, a.avgDecisionTime, a.avgMaxDecisionTime, a.avgAbsorbEvo, a.avgScore,
+      mw?mw.U.toFixed(2):"N/A", mw?mw.z.toFixed(4):"N/A",
+      mw?(mw.p<0.000001?"<0.000001":mw.p.toFixed(6)):"N/A",
+      mw?mw.ruleN:"N/A", mw?mw.oneSGSN:"N/A",
+      mwg?(mwg.p<0.000001?"<0.000001":mwg.p.toFixed(6)):"N/A",
+      mwg?mwg.ruleN:"N/A", mwg?mwg.oneSGSN:"N/A",
+    ]);
+  });
+  downloadCSV("summary_results_en.csv", rows);
+}
+
+function exportSeatDiagnosticCSV(diag){
+  const header = ["Seat","Identity","Wins","Win Rate (%)"];
+  const rows = [header];
+  diag.seatWins.forEach((w,i)=>{
+    rows.push([i, SEAT_LABELS[i], w, diag.seatWinRates[i]]);
+  });
+  rows.push([]);
+  rows.push(["Test","chi2","df","p-value"]);
+  rows.push(["Four-seat overall goodness-of-fit test", diag.chiTest.chi2.toFixed(4), diag.chiTest.df, diag.chiTest.p.toFixed(6)]);
+  rows.push(["Rule-Based AI1(seat0) vs Rule-Based AI2(seat2)", diag.ruleSeat0vs2.chi2.toFixed(4), diag.ruleSeat0vs2.df, diag.ruleSeat0vs2.p.toFixed(6)]);
+  rows.push(["1SGS AI1(seat1) vs 1SGS AI2(seat3)", diag.oneSGSSeat1vs3.chi2.toFixed(4), diag.oneSGSSeat1vs3.df, diag.oneSGSSeat1vs3.p.toFixed(6)]);
+  downloadCSV("seat_diagnostic_results_en.csv", rows);
+}
+
+function exportRawCSV(allAggregates){
+  const header = ["Matchup","Game #","Winning Seat (0-3)","Winning AI Type","Winning Score","Total Turns","Avg. Decision Time (ms)","Max Single-Move Decision Time (ms)","Absorption/Evolution Count","Timed Out"];
+  const rows = [header];
+  allAggregates.forEach(a=>{
+    const matchup = MATCHUPS.find(m=>m.key===a.matchupKey);
+    a.rawResults.forEach((r,i)=>{
+      rows.push([matchup.label, i+1, r.winner??"", r.winnerAiType??"", r.winnerScore, r.totalTurns, r.avgDecisionTime.toFixed(3), r.maxDecisionTime.toFixed(3), r.absorbEvoCount, r.timedOut?"Yes":"No"]);
+    });
+  });
+  downloadCSV("raw_game_logs_en.csv", rows);
+}
+
+// Exports per-game average decision time, split by AI type. This is the
+// data source for fig1's boxplot and for the per-game robustness check
+// in precise_stats_verification.py.
+function exportDecisionTimesByTypeCSV(mainAgg){
+  const header = ["Game #","Rule-Based AI Avg Decision Time (ms)","1SGS AI Avg Decision Time (ms)","Timed Out"];
+  const rows = [header];
+  if(mainAgg && mainAgg.mwTestPerGame){
+    const ruleArr = mainAgg.mwTestPerGame.rulePerGameArr || [];
+    const oneSGSArr = mainAgg.mwTestPerGame.oneSGSPerGameArr || [];
+    const n = Math.max(ruleArr.length, oneSGSArr.length);
+    for(let i=0;i<n;i++){
+      rows.push([i+1, ruleArr[i]!==undefined?ruleArr[i].toFixed(4):"", oneSGSArr[i]!==undefined?oneSGSArr[i].toFixed(4):"", "No"]);
+    }
+  }
+  downloadCSV("decision_times_by_type_en.csv", rows);
+}
+
+// Exports every individual per-move decision time (not averaged), split by
+// AI type. This is the raw data behind the headline per-move Mann-Whitney
+// U result reported in Chapter 5. Can be a large file (tens of thousands
+// of rows) since every single move is one row.
+function exportRawDecisionTimesPerMoveCSV(mainAgg){
+  const rows = [["type","decision_time_ms"]];
+  if(mainAgg && mainAgg.rawResults){
+    mainAgg.rawResults.forEach(r=>{
+      if(r.timedOut || !r.decisionTimesByType) return;
+      r.decisionTimesByType.rule.forEach(t=>rows.push(["rule", t.toFixed(6)]));
+      r.decisionTimesByType.oneSGS.forEach(t=>rows.push(["1SGS", t.toFixed(6)]));
+    });
+  }
+  downloadCSV("raw_decision_times_per_move.csv", rows);
+}
+
+// Exports the cross-matchup pace-consistency test (turns and absorb/evolve
+// count compared pairwise across the three matchups). See compareMatchupPace().
+function exportPaceComparisonCSV(pace){
+  const header = ["Matchup Comparison","Metric","U Statistic","z value","p value"];
+  const rows = [header];
+  Object.entries(pace.turnsTests).forEach(([k,v])=>{
+    rows.push([k, "Turns", v.U.toFixed(2), v.z.toFixed(4), v.p<0.000001?"<0.000001":v.p.toFixed(6)]);
+  });
+  Object.entries(pace.absorbEvoTests).forEach(([k,v])=>{
+    rows.push([k, "AbsorbEvoCount", v.U.toFixed(2), v.z.toFixed(4), v.p<0.000001?"<0.000001":v.p.toFixed(6)]);
+  });
+  downloadCSV("matchup_pace_comparison_en.csv", rows);
+}
+
+// Exports the control-group seat bias analysis: win rate by seat for the
+// two same-AI-type control groups (Rule-Based vs Rule-Based, 1SGS vs
+// 1SGS), where any seat-to-seat difference cannot be confounded with
+// AI type, since every seat in each group runs the same AI.
+function exportControlSeatBiasCSV(ruleControlBias, oneSGSControlBias){
+  const rows = [["Matchup","Seat","Wins","Win Rate (%)"]];
+  [["Rule-Based vs Rule-Based (control)", ruleControlBias], ["1SGS vs 1SGS (control)", oneSGSControlBias]].forEach(([label, bias])=>{
+    if(!bias) return;
+    bias.seatWins.forEach((w,i)=>{
+      rows.push([label, i, w, bias.seatWinRates[i]]);
+    });
+  });
+  rows.push([]);
+  rows.push(["Matchup","chi2","df","p-value"]);
+  if(ruleControlBias) rows.push(["Rule-Based vs Rule-Based (control)", ruleControlBias.chiTest.chi2.toFixed(4), ruleControlBias.chiTest.df, ruleControlBias.chiTest.p<0.000001?"<0.000001":ruleControlBias.chiTest.p.toFixed(6)]);
+  if(oneSGSControlBias) rows.push(["1SGS vs 1SGS (control)", oneSGSControlBias.chiTest.chi2.toFixed(4), oneSGSControlBias.chiTest.df, oneSGSControlBias.chiTest.p<0.000001?"<0.000001":oneSGSControlBias.chiTest.p.toFixed(6)]);
+  downloadCSV("control_group_seat_bias_en.csv", rows);
+}
+
+// Exports the ruleAI_v2 extension experiment summary (win rates + chi-square
+// results for ruleAI_v2 vs original Rule-Based, vs 1SGS, and vs itself).
+function exportExtensionSummaryCSV(extAggregates){
+  const header = ["Matchup","Total Games","Completion Rate (%)","Timed-Out Games","AI_v2 Win Rate (%)","Opponent Win Rate (%)","chi2","p-value"];
+  const rows = [header];
+  extAggregates.forEach(a=>{
+    const matchup = EXTENSION_MATCHUPS.find(m=>m.key===a.matchupKey);
+    rows.push([matchup.label, a.total, a.completionRate, a.timedOutCount, a.winRateV2, a.winRateOpponent, a.chiTest?a.chiTest.chi2.toFixed(3):"N/A", a.chiTest?(a.chiTest.p<0.000001?"<0.000001":a.chiTest.p.toFixed(6)):"N/A"]);
+  });
+  downloadCSV("ruleAI_v2_extension_results_en.csv", rows);
+}
+
+// Exports per-game raw results for the ruleAI_v2 extension experiment.
+function exportExtensionRawCSV(extAggregates){
+  const header = ["Matchup","Game #","Winning Seat (0-3)","Winning AI Type","Total Turns","Timed Out"];
+  const rows = [header];
+  extAggregates.forEach(a=>{
+    const matchup = EXTENSION_MATCHUPS.find(m=>m.key===a.matchupKey);
+    a.rawResults.forEach((r,i)=>{
+      rows.push([matchup.label, i+1, r.winner??"", r.winnerAiType??"", r.totalTurns, r.timedOut?"Yes":"No"]);
+    });
+  });
+  downloadCSV("ruleAI_v2_extension_results_en_raw.csv", rows);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   UI
+   ══════════════════════════════════════════════════════════════ */
+function App(){
+  const [gamesPerMatchup, setGamesPerMatchup] = useState(100);
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState({current:0,total:0,matchup:""});
+  const [aggregates, setAggregates] = useState([]);
+  const [seatDiag, setSeatDiag] = useState(null);
+  const [runningDiag, setRunningDiag] = useState(false);
+  const [paceComparison, setPaceComparison] = useState(null);
+  const [controlSeatBias, setControlSeatBias] = useState(null);
+  const [extAggregates, setExtAggregates] = useState([]);
+  const [runningExt, setRunningExt] = useState(false);
+  const [progressExt, setProgressExt] = useState({current:0,total:0,matchup:""});
+  const stopFlag = useRef(false);
+
+  const runAll = async () => {
+    setRunning(true);
+    stopFlag.current = false;
+    const results = [];
+    for(const matchup of MATCHUPS){
+      if(stopFlag.current) break;
+      const hasMixedTypes = new Set(matchup.seats).size > 1;
+      setProgress({current:0,total:gamesPerMatchup,matchup:matchup.label});
+      // Run in chunks so the UI can update the progress bar (avoids blocking the main thread)
+      const batchResults = [];
+      const chunkSize = 5;
+      for(let i=0;i<gamesPerMatchup;i+=chunkSize){
+        if(stopFlag.current) break;
+        const n = Math.min(chunkSize, gamesPerMatchup-i);
+        for(let j=0;j<n;j++){
+          // Key fix: in mixed matchups (Rule-Based vs 1SGS), reshuffle seat assignment every game,
+          // to avoid a fixed-seat position bias contaminating the AI-type win-rate comparison
+          const gameSeats = hasMixedTypes ? shuffle(matchup.seats) : matchup.seats;
+          batchResults.push(simulateOneGame(gameSeats));
+        }
+        setProgress({current:i+n,total:gamesPerMatchup,matchup:matchup.label});
+        await new Promise(r=>setTimeout(r,0)); // yield to UI
+      }
+      const agg = aggregate(matchup.key, matchup.seats, batchResults);
+      results.push(agg);
+      setAggregates([...results]);
+    }
+    // Once all three main matchups are done, compute the cross-matchup
+    // pace-consistency test automatically (needs all three to compare pairwise)
+    if(results.length===MATCHUPS.length){
+      setPaceComparison(compareMatchupPace(results));
+      // Also compute the clean, non-confounded seat-bias check using the two
+      // same-type control groups already collected above (see
+      // analyzeControlGroupSeatBias comment for why this is preferred over
+      // the AI-type-confounded runSeatDiagnostic below).
+      const ruleControl = results.find(a=>a.matchupKey==="rule_vs_rule");
+      const oneSGSControl = results.find(a=>a.matchupKey==="1SGS_vs_1SGS");
+      setControlSeatBias({
+        rule: analyzeControlGroupSeatBias(ruleControl),
+        oneSGS: analyzeControlGroupSeatBias(oneSGSControl),
+      });
+    }
+    setRunning(false);
+    setProgress({current:0,total:0,matchup:""});
+  };
+
+  // Seat-level diagnostic: fixed seating (no shuffling), specifically measuring
+  // whether the seat position itself carries any advantage. This is the opposite
+  // purpose of the randomisation in runAll above — seat identity must be kept
+  // fixed here in order to be tracked across games.
+  const runSeatDiagnosticUI = async () => {
+    setRunningDiag(true);
+    await new Promise(r=>setTimeout(r,0));
+    const diag = runSeatDiagnostic(gamesPerMatchup);
+    setSeatDiag(diag);
+    setRunningDiag(false);
+  };
+
+  // Extension experiment: ruleAI_v2 vs original Rule-Based, vs 1SGS, and
+  // vs itself as a control. Kept fully separate from runAll/aggregates so
+  // this follow-up experiment never mixes with the primary comparison.
+  const runExtensionUI = async () => {
+    setRunningExt(true);
+    stopFlag.current = false;
+    const results = [];
+    for(const matchup of EXTENSION_MATCHUPS){
+      if(stopFlag.current) break;
+      const hasMixedTypes = new Set(matchup.seats).size > 1;
+      setProgressExt({current:0,total:gamesPerMatchup,matchup:matchup.label});
+      const batchResults = [];
+      const chunkSize = 5;
+      for(let i=0;i<gamesPerMatchup;i+=chunkSize){
+        if(stopFlag.current) break;
+        const n = Math.min(chunkSize, gamesPerMatchup-i);
+        for(let j=0;j<n;j++){
+          const gameSeats = hasMixedTypes ? shuffle(matchup.seats) : matchup.seats;
+          batchResults.push(simulateOneGame(gameSeats));
+        }
+        setProgressExt({current:i+n,total:gamesPerMatchup,matchup:matchup.label});
+        await new Promise(r=>setTimeout(r,0));
+      }
+      const agg = aggregateExtension(matchup, batchResults);
+      results.push(agg);
+      setExtAggregates([...results]);
+    }
+    setRunningExt(false);
+    setProgressExt({current:0,total:0,matchup:""});
+  };
+
+  return (
+    <div style={{maxWidth:1000,margin:"0 auto",padding:"32px 24px"}}>
+      <div style={{textAlign:"center",marginBottom:28}}>
+        <h1 style={{fontSize:26,color:"#2a4a6a",fontWeight:800}}>🃏 Origins of All Things · AI Battle Data Collection</h1>
+        <p style={{color:"#6a8aa8",fontSize:14,marginTop:6}}>
+          Automatically runs batches of Rule-Based vs 1SGS AI games, collecting win rate / decision speed / game length / absorption-evolution frequency data
+        </p>
+      </div>
+
+      <div style={{background:"#fff",borderRadius:16,padding:"20px 24px",boxShadow:"0 4px 20px rgba(100,150,200,0.12)",marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+          <label style={{fontSize:14,color:"#3a5a80",fontWeight:700}}>
+            Games per matchup:
+            <input type="number" value={gamesPerMatchup} min={10} max={20000}
+              onChange={e=>setGamesPerMatchup(Math.max(10,Math.min(20000,+e.target.value||100)))}
+              disabled={running}
+              style={{marginLeft:8,width:80,padding:"6px 10px",borderRadius:8,border:"1.5px solid #cddfee",fontSize:14}}/>
+          </label>
+          <button onClick={runAll} disabled={running}
+            style={{
+              background: running ? "#b0c4d8" : "linear-gradient(135deg,#5b9bd5,#3a7bc8)",
+              color:"#fff",border:"none",borderRadius:10,padding:"10px 24px",
+              fontSize:14,fontWeight:700,cursor:running?"not-allowed":"pointer",
+              boxShadow: running?"none":"0 3px 12px rgba(80,140,200,0.35)",
+            }}>
+            {running ? "Running…" : "▶ Run All Experiments"}
+          </button>
+          <button onClick={runSeatDiagnosticUI} disabled={runningDiag||running}
+            style={{
+              background: runningDiag ? "#c8b8dc" : "linear-gradient(135deg,#a878c8,#8858a8)",
+              color:"#fff",border:"none",borderRadius:10,padding:"10px 24px",
+              fontSize:14,fontWeight:700,cursor:(runningDiag||running)?"not-allowed":"pointer",
+              boxShadow: runningDiag?"none":"0 3px 12px rgba(140,90,170,0.35)",
+            }}>
+            {runningDiag ? "Running…" : "🪑 Seat Diagnostic (Fixed Seating)"}
+          </button>
+          {aggregates.length>0 && !running && (
+            <>
+              <button onClick={()=>exportSummaryCSV(aggregates)}
+                style={{background:"#4caf7d",color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                📊 Export Summary CSV
+              </button>
+              <button onClick={()=>exportRawCSV(aggregates)}
+                style={{background:"#e0954a",color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                📄 Export Raw Data CSV
+              </button>
+              <button onClick={()=>exportDecisionTimesByTypeCSV(aggregates.find(a=>a.matchupKey==="rule_vs_1SGS"))}
+                style={{background:"#5b9bd5",color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                ⏱ Export Decision Times By Type CSV
+              </button>
+              <button onClick={()=>exportRawDecisionTimesPerMoveCSV(aggregates.find(a=>a.matchupKey==="rule_vs_1SGS"))}
+                style={{background:"#3a7bc8",color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                ⏱ Export Raw Per-Move Decision Times CSV
+              </button>
+            </>
+          )}
+          <button onClick={runExtensionUI} disabled={runningExt||running}
+            style={{
+              background: runningExt ? "#c8dcc8" : "linear-gradient(135deg,#7ec87e,#4caf7d)",
+              color:"#fff",border:"none",borderRadius:10,padding:"10px 24px",
+              fontSize:14,fontWeight:700,cursor:(runningExt||running)?"not-allowed":"pointer",
+              boxShadow: runningExt?"none":"0 3px 12px rgba(76,175,125,0.35)",
+            }}>
+            {runningExt ? "Running…" : "🔧 Run ruleAI_v2 Extension Experiment"}
+          </button>
+        </div>
+
+        {paceComparison && (
+          <div style={{marginTop:12}}>
+            <button onClick={()=>exportPaceComparisonCSV(paceComparison)}
+              style={{background:"#8858a8",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+              📈 Export Matchup Pace Comparison CSV
+            </button>
+          </div>
+        )}
+
+        {controlSeatBias && (controlSeatBias.rule || controlSeatBias.oneSGS) && (
+          <div style={{background:"#fff",borderRadius:16,padding:"18px 22px",marginTop:16,boxShadow:"0 4px 16px rgba(100,150,200,0.1)"}}>
+            <h3 style={{fontSize:16,color:"#2a4a6a",marginBottom:6,fontWeight:800}}>
+              🪑 Control-Group Seat Bias <span style={{fontSize:12,color:"#9ab0c4",fontWeight:400}}>
+                (same-AI-type control groups, seat effect not confounded with AI type)
+              </span>
+            </h3>
+            <p style={{fontSize:12,color:"#7098c0",marginBottom:12}}>
+              Uses the Rule-Based vs Rule-Based and 1SGS vs 1SGS control groups already
+              collected above. Every seat in each group runs the same AI, so any win-rate
+              difference across seats can only reflect seat position itself.
+            </p>
+            {[["Rule-Based vs Rule-Based", controlSeatBias.rule], ["1SGS vs 1SGS", controlSeatBias.oneSGS]].map(([label, bias])=>bias&&(
+              <div key={label} style={{marginBottom:12}}>
+                <b style={{fontSize:13}}>{label}</b> — valid games: {bias.validN}
+                <table>
+                  <thead><tr><th>Seat 0</th><th>Seat 1</th><th>Seat 2</th><th>Seat 3</th></tr></thead>
+                  <tbody><tr>{bias.seatWinRates.map((r,i)=><td key={i}>{r}%</td>)}</tr></tbody>
+                </table>
+                <div style={{fontSize:12,color:"#5a7a9a",marginTop:4}}>
+                  χ²={bias.chiTest.chi2.toFixed(3)}, df={bias.chiTest.df},{" "}
+                  <b style={{color:bias.chiTest.p<0.05?"#c04040":"#3d8b3d"}}>
+                    p={bias.chiTest.p<0.000001?"<0.000001":bias.chiTest.p.toFixed(6)}
+                    {bias.chiTest.p<0.05?" (significant seat effect)":" (no significant seat effect)"}
+                  </b>
+                </div>
+              </div>
+            ))}
+            <button onClick={()=>exportControlSeatBiasCSV(controlSeatBias.rule, controlSeatBias.oneSGS)}
+              style={{background:"#8858a8",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+              🪑 Export Control-Group Seat Bias CSV
+            </button>
+          </div>
+        )}
+
+        {runningExt && (
+          <div style={{marginTop:16}}>
+            <div style={{fontSize:13,color:"#5a9a6a",marginBottom:6}}>
+              Running: {progressExt.matchup} ({progressExt.current}/{progressExt.total} games)
+            </div>
+            <div style={{background:"#e4f4e8",borderRadius:8,height:10,overflow:"hidden"}}>
+              <div style={{
+                width:`${progressExt.total?progressExt.current/progressExt.total*100:0}%`,
+                height:"100%",background:"linear-gradient(90deg,#7ec87e,#4caf7d)",
+                transition:"width 0.2s",
+              }}/>
+            </div>
+          </div>
+        )}
+
+        {extAggregates.length>0 && (
+          <div style={{marginTop:16}}>
+            <table>
+              <thead>
+                <tr><th>Matchup</th><th>Completion</th><th>v2 Win Rate</th><th>Opponent Win Rate</th><th>chi2</th><th>p-value</th></tr>
+              </thead>
+              <tbody>
+                {extAggregates.map(a=>(
+                  <tr key={a.matchupKey}>
+                    <td>{EXTENSION_MATCHUPS.find(m=>m.key===a.matchupKey).label}</td>
+                    <td>{a.completionRate}%</td>
+                    <td>{a.winRateV2}{a.winRateV2!=="N/A"?"%":""}</td>
+                    <td>{a.winRateOpponent}{a.winRateOpponent!=="N/A"?"%":""}</td>
+                    <td>{a.chiTest?a.chiTest.chi2.toFixed(3):"N/A"}</td>
+                    <td style={{fontWeight:700,color:!a.chiTest?"#888":a.chiTest.p<0.05?"#c04040":"#3d8b3d"}}>{a.chiTest?(a.chiTest.p<0.000001?"<0.000001":a.chiTest.p.toFixed(6)):"N/A"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!runningExt && (
+              <div style={{marginTop:10}}>
+                <button onClick={()=>exportExtensionSummaryCSV(extAggregates)}
+                  style={{background:"#4caf7d",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:13,fontWeight:700,cursor:"pointer",marginRight:8}}>
+                  📊 Export Extension Summary CSV
+                </button>
+                <button onClick={()=>exportExtensionRawCSV(extAggregates)}
+                  style={{background:"#e0954a",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                  📄 Export Extension Raw Data CSV
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {running && (
+          <div style={{marginTop:16}}>
+            <div style={{fontSize:13,color:"#5a7a9a",marginBottom:6}}>
+              Running: {progress.matchup} ({progress.current}/{progress.total} games)
+            </div>
+            <div style={{background:"#e4ecf4",borderRadius:8,height:10,overflow:"hidden"}}>
+              <div style={{
+                width:`${progress.total?progress.current/progress.total*100:0}%`,
+                height:"100%",background:"linear-gradient(90deg,#5b9bd5,#3a7bc8)",
+                transition:"width 0.2s",
+              }}/>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {aggregates.length===0 && !running && (
+        <div style={{textAlign:"center",color:"#9ab0c4",padding:"60px 20px",background:"#fff",borderRadius:16}}>
+          Click the button above to start the experiment.<br/>
+          Three matchups will run in sequence: Rule-Based vs 1SGS, Rule-Based vs Rule-Based (control), 1SGS vs 1SGS (control),<br/>
+          each defaulting to 100 games (300 total), typically finishing within seconds.
+        </div>
+      )}
+
+      {aggregates.map(a=>{
+        const matchup = MATCHUPS.find(m=>m.key===a.matchupKey);
+        return (
+          <div key={a.matchupKey} style={{background:"#fff",borderRadius:16,padding:"18px 22px",marginBottom:16,boxShadow:"0 4px 16px rgba(100,150,200,0.1)"}}>
+            <h3 style={{fontSize:16,color:"#2a4a6a",marginBottom:12,fontWeight:800}}>
+              {matchup.label} <span style={{fontSize:12,color:"#9ab0c4",fontWeight:400}}>
+                (total {a.total} games{a.timedOutCount>0?`, ${a.timedOutCount} timed out without a winner`:""})
+              </span>
+            </h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Completion Rate</th>
+                  <th>Rule-Based Win Rate</th>
+                  <th>1SGS Win Rate</th>
+                  <th>Avg. Turns</th>
+                  <th>Avg. Decision Time</th>
+                  <th>Max Single-Move Decision</th>
+                  <th>Avg. Absorption/Evolution Count</th>
+                  <th>Avg. Winning Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style={{fontWeight:700,color:a.completionRate>=70?"#3d8b3d":a.completionRate>=40?"#c08020":"#c04040"}}>
+                    {a.completionRate}%
+                  </td>
+                  <td style={{color:"#3d8b3d",fontWeight:700}}>{a.winRateRule}{a.winRateRule!=="N/A"?"%":""}</td>
+                  <td style={{color:"#7b3fa0",fontWeight:700}}>{a.winRateOneSGS}{a.winRateOneSGS!=="N/A"?"%":""}</td>
+                  <td>{a.avgTurns} turns</td>
+                  <td>{a.avgDecisionTime} ms</td>
+                  <td>{a.avgMaxDecisionTime} ms</td>
+                  <td>{a.avgAbsorbEvo}</td>
+                  <td>{a.avgScore} pts</td>
+                </tr>
+              </tbody>
+            </table>
+            {a.mwTest && (
+              <div style={{marginTop:12,padding:"10px 14px",background:"#f4f0fa",borderRadius:10,fontSize:12.5,color:"#5a4a7a",lineHeight:1.7}}>
+                <b>Decision-time significance test (Mann-Whitney U, non-parametric — decision times are not normally distributed, so a t-test/chi-square test is not appropriate):</b><br/>
+                Rule-Based N={a.mwTest.ruleN} moves, mean={a.mwTest.ruleMean.toFixed(4)}ms&nbsp;&nbsp;|&nbsp;&nbsp;
+                1SGS N={a.mwTest.oneSGSN} moves, mean={a.mwTest.oneSGSMean.toFixed(4)}ms<br/>
+                U={a.mwTest.U.toFixed(1)}, z={a.mwTest.z.toFixed(3)},{" "}
+                <b style={{color:a.mwTest.p<0.05?"#c04040":"#3d8b3d"}}>
+                  p={a.mwTest.p<0.000001?"<0.000001":a.mwTest.p.toFixed(6)}
+                  {a.mwTest.p<0.05?" (significant difference)":" (not significant)"}
+                </b>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {aggregates.length===MATCHUPS.length && (
+        <div style={{background:"#eef8f0",border:"1.5px solid #b8ddb6",borderRadius:14,padding:"16px 20px",fontSize:13,color:"#3d6b3d",lineHeight:1.8}}>
+          ✅ All experiments complete! Suggested next steps:
+          <br/>1. Click "Export Summary CSV" for the three-matchup summary table, for the dissertation Evaluation chapter
+          <br/>2. Click "Export Raw Data CSV" for per-game detailed records, usable for further statistical tests (e.g. t-test)
+          <br/>3. Comparing against the Rule-Based vs Rule-Based and 1SGS vs 1SGS control groups rules out confounds like first-mover advantage, strengthening the Rule-Based vs 1SGS comparison
+          <br/>4. Decision-time significance has now been formally tested with a Mann-Whitney U test (shown under each table above), rather than a descriptive comparison alone
+        </div>
+      )}
+
+      {seatDiag && (
+        <div style={{background:"#fff",borderRadius:16,padding:"18px 22px",marginTop:20,boxShadow:"0 4px 16px rgba(140,90,170,0.15)",border:"1.5px solid #e0d0ec"}}>
+          <h3 style={{fontSize:16,color:"#6a3a8a",marginBottom:6,fontWeight:800}}>
+            🪑 Seat Diagnostic Results <span style={{fontSize:12,color:"#a888c0",fontWeight:400}}>
+              (fixed seating, {seatDiag.n} games total, {seatDiag.validN} valid, {seatDiag.timedOutCount} timed out)
+            </span>
+            <button onClick={()=>exportSeatDiagnosticCSV(seatDiag)}
+              style={{marginLeft:12,background:"#8858a8",color:"#fff",border:"none",borderRadius:8,padding:"4px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+              📄 Export Seat Diagnostic CSV
+            </button>
+          </h3>
+          <p style={{fontSize:12,color:"#9070a8",marginBottom:14}}>
+            Seats are fixed as: seat 0 = Rule-Based AI1, seat 1 = 1SGS AI1, seat 2 = Rule-Based AI2, seat 3 = 1SGS AI2 (never shuffled),
+            to specifically test whether seat position itself carries a win-rate advantage, independent of the AI-type comparison above.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Seat</th>
+                <th>Identity</th>
+                <th>Wins</th>
+                <th>Win Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {seatDiag.seatWins.map((w,i)=>(
+                <tr key={i}>
+                  <td>Seat {i}</td>
+                  <td style={{fontWeight:700,color:i%2===0?"#3d8b3d":"#7b3fa0"}}>{SEAT_LABELS[i]}</td>
+                  <td>{w}</td>
+                  <td>{seatDiag.seatWinRates[i]}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{marginTop:12,padding:"10px 14px",background:"#f4eefa",borderRadius:10,fontSize:12.5,color:"#5a4a7a",lineHeight:1.8}}>
+            <b>Four-seat overall chi-square goodness-of-fit test</b> (if no seat advantage exists, wins should be roughly evenly distributed):
+            χ²={seatDiag.chiTest.chi2.toFixed(3)}, df={seatDiag.chiTest.df},{" "}
+            <b style={{color:seatDiag.chiTest.p<0.05?"#c04040":"#3d8b3d"}}>
+              p={seatDiag.chiTest.p.toFixed(4)}{seatDiag.chiTest.p<0.05?" (significant seat effect)":" (no significant seat effect)"}
+            </b>
+            <br/><br/>
+            <b>Rule-Based AI1(seat0) vs Rule-Based AI2(seat2)</b> same-type cross-seat comparison:
+            χ²={seatDiag.ruleSeat0vs2.chi2.toFixed(3)},{" "}
+            <b style={{color:seatDiag.ruleSeat0vs2.p<0.05?"#c04040":"#3d8b3d"}}>
+              p={seatDiag.ruleSeat0vs2.p.toFixed(4)}
+            </b>
+            <br/>
+            <b>1SGS AI1(seat1) vs 1SGS AI2(seat3)</b> same-type cross-seat comparison:
+            χ²={seatDiag.oneSGSSeat1vs3.chi2.toFixed(3)},{" "}
+            <b style={{color:seatDiag.oneSGSSeat1vs3.p<0.05?"#c04040":"#3d8b3d"}}>
+              p={seatDiag.oneSGSSeat1vs3.p.toFixed(4)}
+            </b>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
