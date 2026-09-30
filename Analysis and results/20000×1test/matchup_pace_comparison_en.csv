@@ -1,0 +1,7 @@
+﻿Matchup Comparison,Metric,U Statistic,z value,p value
+rule_vs_1SGS_vs_rule_vs_rule,Turns,76660856.00,-0.2694,0.787616
+rule_vs_1SGS_vs_1SGS_vs_1SGS,Turns,73053408.00,-2.0320,0.042153
+rule_vs_rule_vs_1SGS_vs_1SGS,Turns,74715247.50,-2.3273,0.019949
+rule_vs_1SGS_vs_rule_vs_rule,AbsorbEvoCount,76353836.50,-0.8431,0.399185
+rule_vs_1SGS_vs_1SGS_vs_1SGS,AbsorbEvoCount,73695066.00,-0.8918,0.372477
+rule_vs_rule_vs_1SGS_vs_1SGS,AbsorbEvoCount,75078239.50,-1.7355,0.082650

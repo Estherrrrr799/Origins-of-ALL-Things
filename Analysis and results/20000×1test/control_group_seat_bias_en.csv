@@ -1,0 +1,13 @@
+﻿Matchup,Seat,Wins,Win Rate (%)
+Rule-Based vs Rule-Based (control),0,3072,24.5
+Rule-Based vs Rule-Based (control),1,3192,25.4
+Rule-Based vs Rule-Based (control),2,3200,25.5
+Rule-Based vs Rule-Based (control),3,3084,24.6
+1SGS vs 1SGS (control),0,2906,24.0
+1SGS vs 1SGS (control),1,3196,26.4
+1SGS vs 1SGS (control),2,3044,25.1
+1SGS vs 1SGS (control),3,2970,24.5
+
+Matchup,chi2,df,p-value
+Rule-Based vs Rule-Based (control),4.4718,3,0.213286
+1SGS vs 1SGS (control),15.4256,3,0.001643

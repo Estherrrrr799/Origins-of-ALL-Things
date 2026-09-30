@@ -1,0 +1,17 @@
+﻿Test,Exact statistic (scipy),Exact p-value (scipy)
+Rule-Based vs 1SGS win rate,2.1701,1.407136e-01
+"Decision time per move (N_rule=202249, N_1SGS=202118)",17874104102.5000,0.000000e+00
+"Decision time per game (N_rule=12230, N_1SGS=12236)",12644121.5000,0.000000e+00
+Four-seat overall goodness-of-fit,4.2074,2.399177e-01
+Rule-Based AI1 (seat0) vs Rule-Based AI2 (seat2),0.2294,6.320048e-01
+1SGS AI1 (seat1) vs 1SGS AI2 (seat3),1.4139,2.344054e-01
+Control seat bias: Rule-Based vs Rule-Based (control),4.4718,2.148206e-01
+Control seat bias: 1SGS vs 1SGS (control),15.4256,1.486839e-03
+Rule-Based AI v2 vs Rule-Based AI (original),146.7270,9.003365e-34
+Rule-Based AI v2 vs 1SGS AI,183.1226,1.008474e-41
+Turns: rule_vs_1SGS vs rule_vs_rule,76660856.0000,7.876164e-01
+Turns: rule_vs_1SGS vs 1SGS_vs_1SGS,75282780.0000,4.215274e-02
+Turns: rule_vs_rule vs 1SGS_vs_1SGS,77316320.5000,1.994954e-02
+AbsorbEvo: rule_vs_1SGS vs rule_vs_rule,76353836.5000,3.991854e-01
+AbsorbEvo: rule_vs_1SGS vs 1SGS_vs_1SGS,74641122.0000,3.724781e-01
+AbsorbEvo: rule_vs_rule vs 1SGS_vs_1SGS,76953328.5000,8.264984e-02
